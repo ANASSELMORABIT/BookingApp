@@ -1,0 +1,13 @@
+using Microsoft.AspNetCore.Authorization;
+
+namespace BookingApp.API.Authorization.Requirements;
+
+public class RoleRequirement : IAuthorizationRequirement
+{
+    public string[] AllowedRoles { get; }
+
+    public RoleRequirement(params string[] allowedRoles)
+    {
+        AllowedRoles = allowedRoles;
+    }
+}
