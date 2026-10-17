@@ -1,206 +1,193 @@
-# BookingApp 📅
+# BookingApp
 
-> **Plataforma SaaS de reservas multi-tenant** para peluquerías, gimnasios, clínicas y espacios de coworking.
+Plataforma de reservas multi-tenant para negocios de servicios (peluquerías, gimnasios, clínicas, coworkings). Cada negocio gestiona sus locales, empleados, servicios y citas, y publica una página de reserva para que sus clientes reserven sin crear cuenta.
 
-![ASP.NET Core](https://img.shields.io/badge/ASP.NET_Core-10.0-7C3AED?style=flat-square&logo=dotnet)
-![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react)
-![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript)
+API REST en **ASP.NET Core (.NET 10)** con **EF Core + PostgreSQL**, y SPA en **React + TypeScript**. Proyecto personal de portfolio.
+
+[![CI](https://github.com/ANASSELMORABIT/BookingApp/actions/workflows/ci.yml/badge.svg)](https://github.com/ANASSELMORABIT/BookingApp/actions/workflows/ci.yml)
+![.NET](https://img.shields.io/badge/.NET-10-512BD4?style=flat-square&logo=dotnet)
+![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react)
+![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6?style=flat-square&logo=typescript)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?style=flat-square&logo=postgresql)
-![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=flat-square&logo=docker)
 
 ---
 
-## ✨ Características principales
+## Funcionalidades
 
-- 🏢 **Multi-tenant** — cada negocio tiene su subdominio y datos aislados
-- 🔐 **Autenticación JWT** con roles granulares: SuperAdmin, Owner, Staff, Client
-- 📅 **Calendario visual** interactivo (vista diaria, semanal y mensual)
-- 🌐 **Página pública** de reservas sin necesidad de cuenta
-- 🔔 **Notificaciones en tiempo real** via SignalR (WebSockets)
-- 📊 **Dashboard** con KPIs, gráficas y análisis de rendimiento
-- 📤 **Exportación** a Excel y PDF con estadísticas detalladas
-- 💳 **Pagos integrados** con Stripe (modo test)
-- 📧 **Email reminders** automáticos con Hangfire
-- 🐳 **Docker** — completamente contenedorizado
+**Implementadas**
 
----
+- **Multi-tenant**: cada negocio es un tenant identificado por un *slug* (p. ej. `mi-peluqueria`). El `tenant_id` viaja en el JWT; los servicios comprueban que negocios, servicios, empleados y reservas pertenecen al tenant del usuario, y el hub de SignalR asigna los grupos en el servidor a partir de los claims.
+- **Autenticación JWT** con contraseñas hasheadas con BCrypt y **autorización por políticas** para cuatro roles: `SuperAdmin`, `Owner`, `Staff` y `Client`.
+- **Gestión de negocios, empleados y servicios** (CRUD) desde el panel de administración.
+- **Motor de disponibilidad**: genera los huecos del día según el horario del negocio y la duración del servicio, marca como ocupados los que se solapan con reservas existentes del empleado y convierte entre UTC y la zona horaria del negocio (`Europe/Madrid`).
+- **Validación de reservas** común a la reserva autenticada y a la pública: empleado del mismo negocio, dentro del horario, no en el pasado y sin solapamientos con otras reservas del empleado.
+- **Página pública de reserva** (`/book/:slug`) en cuatro pasos: servicio y empleado → fecha y hora → datos personales → confirmación.
+- **Calendario** de reservas con vistas de mes, semana y día (FullCalendar).
+- **Dashboard y estadísticas**: KPIs, gráficas con Recharts, ranking de servicios y rendimiento por empleado, con filtros por negocio y periodo.
+- **Exportación** de reservas a Excel (ClosedXML) y de estadísticas a PDF (QuestPDF).
+- **Notificaciones en tiempo real** con SignalR al crear o cancelar reservas.
+- **Job recurrente con Hangfire** (cada hora) que localiza las reservas confirmadas de las próximas 24 h para enviar recordatorios.
 
-## 🚀 Demo rápida
+**Parciales / en desarrollo**
 
-| URL | Descripción |
-|-----|-------------|
-| `http://localhost:5173` | Aplicación web (Frontend) |
-| `http://localhost:5173/book/:subdomain` | Página pública de reservas |
-| `http://localhost:5239/scalar/v1` | Documentación API (Scalar) |
-| `http://localhost:5239/hangfire` | Panel de jobs en background |
+- **Emails**: `EmailService` registra el envío en el log; todavía no está conectado a un proveedor SMTP.
+- **Pagos con Stripe**: el backend crea `PaymentIntent` y procesa el webhook firmado (`payment_intent.succeeded` marca la reserva como pagada y confirmada). La interfaz de pago en el frontend aún no está implementada.
+- **Docker**: hay `Dockerfile` multi-stage para la API y `docker-compose.yml` con PostgreSQL. El frontend se ejecuta con Vite en local.
 
 ---
 
-## 🛠️ Stack tecnológico
+## Stack
 
-### Backend
-| Tecnología | Uso |
-|-----------|-----|
-| ASP.NET Core 10 | Framework principal REST API |
-| Entity Framework Core | ORM + migraciones |
-| PostgreSQL 16 | Base de datos principal |
-| SignalR | Notificaciones en tiempo real |
-| Hangfire | Jobs en background (emails) |
-| JWT Bearer | Autenticación y autorización |
-| BCrypt.Net | Hash seguro de contraseñas |
-| Stripe.net | Integración de pagos |
-| ClosedXML | Exportación Excel |
-| QuestPDF | Generación de PDFs |
-
-### Frontend
-| Tecnología | Uso |
-|-----------|-----|
-| React 18 + TypeScript | Framework UI |
-| Vite | Build tool |
-| Tailwind CSS v4 | Estilos |
-| Shadcn/ui | Componentes accesibles |
-| TanStack Query | Estado del servidor |
-| React Router v6 | Enrutamiento SPA |
-| Recharts | Gráficas y visualizaciones |
-| FullCalendar | Calendario interactivo |
-| Microsoft SignalR | Cliente WebSockets |
+| Capa | Tecnologías |
+|------|-------------|
+| Backend | ASP.NET Core 10 (Web API), C#, Entity Framework Core 10, Npgsql |
+| Base de datos | PostgreSQL 16 (migraciones con EF Core) |
+| Seguridad | JWT Bearer, BCrypt.Net, autorización por políticas |
+| Tiempo real y jobs | SignalR, Hangfire (almacenamiento en PostgreSQL) |
+| Integraciones | Stripe.net, ClosedXML, QuestPDF |
+| Documentación API | OpenAPI + Scalar (entorno Development) |
+| Frontend | React 19, TypeScript, Vite, React Router 7, TanStack Query, Axios |
+| UI | Tailwind CSS 4, componentes shadcn/ui (Radix), Recharts, FullCalendar, Sonner |
+| Tests y CI | xUnit, EF Core InMemory, GitHub Actions |
 
 ---
 
-## 📁 Estructura del proyecto
+## Arquitectura
+
+Solución organizada por capas, con dependencias hacia el dominio:
 
 ```
-BookingApp/
-├── src/
-│   ├── BookingApp.Domain/          # Entidades y Enums
-│   ├── BookingApp.Application/     # Interfaces y DTOs
-│   ├── BookingApp.Infrastructure/  # EF Core, Servicios, SignalR
-│   ├── BookingApp.API/             # Controllers, Hubs, Program.cs
-│   └── Booking.Frontend/           # React + TypeScript + Vite
-├── tests/
-│   └── BookingApp.Tests/           # Tests unitarios xUnit
-├── docker-compose.yml
-├── Dockerfile
-└── BookingApp.slnx
+src/
+├── BookingApp.Domain/          Entidades (Tenant, Business, Service, Staff, Booking, AppUser) y enums
+├── BookingApp.Application/     Contratos de servicios (interfaces) y DTOs
+├── BookingApp.Infrastructure/  EF Core (DbContext, configuraciones, migraciones), servicios, Hangfire
+├── BookingApp.API/             Controllers, hub de SignalR, configuración (Program.cs)
+└── Booking.Frontend/           SPA React + TypeScript + Vite
+tests/
+└── BookingApp.Tests/           Tests unitarios (xUnit)
 ```
+
+- Las entidades encapsulan su estado (setters privados y métodos de fábrica como `Booking.Create`), y la lógica de solapamiento vive en el dominio (`Booking.OverlapsWith`).
+- Las fechas se guardan en UTC y se convierten a la zona horaria del negocio al calcular y devolver los huecos.
 
 ---
 
-## ⚡ Instalación y ejecución local
+## Puesta en marcha
 
-### Requisitos previos
+### Requisitos
+
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
 - [Node.js 20+](https://nodejs.org)
-- [Docker Desktop](https://www.docker.com/products/docker-desktop)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop) (para PostgreSQL)
 
-### 1. Clonar el repositorio
+### 1. Clonar
+
 ```bash
 git clone https://github.com/ANASSELMORABIT/BookingApp.git
 cd BookingApp
 ```
 
-### 2. Levantar la base de datos
+### 2. Configurar variables
+
+Copia `.env.example` a `.env` y rellena los valores. Para el backend en local, define los secretos con *user-secrets* en lugar de escribirlos en `appsettings.json`:
+
 ```bash
-docker-compose up -d
+cd src/BookingApp.API
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Port=5432;Database=bookingapp;Username=<usuario>;Password=<contraseña>"
+dotnet user-secrets set "Jwt:Key" "<clave-aleatoria-de-al-menos-32-caracteres>"
+dotnet user-secrets set "Stripe:SecretKey" "<sk_test_...>"        # opcional
+dotnet user-secrets set "Stripe:WebhookSecret" "<whsec_...>"      # opcional
+cd ../..
 ```
 
-### 3. Aplicar migraciones
+### 3. Base de datos
+
 ```bash
-dotnet ef database update --project src\BookingApp.Infrastructure --startup-project src\BookingApp.API
+docker compose up -d postgres
+dotnet ef database update --project src/BookingApp.Infrastructure --startup-project src/BookingApp.API
 ```
 
-### 4. Arrancar el backend
+### 4. Backend
+
 ```bash
-dotnet run --project src\BookingApp.API
+dotnet run --project src/BookingApp.API
 ```
 
-### 5. Arrancar el frontend
+API en `http://localhost:5239` · Referencia interactiva (Scalar) en `http://localhost:5239/scalar/v1` · Panel de Hangfire en `http://localhost:5239/hangfire`.
+
+### 5. Frontend
+
 ```bash
-cd src\Booking.Frontend
+cd src/Booking.Frontend
 npm install
 npm run dev
 ```
 
-### 6. Abrir en el navegador
-```
-http://localhost:5173
-```
+Aplicación en `http://localhost:5173` (Vite redirige `/api` al backend).
+
+### 6. Datos de prueba
+
+La base de datos arranca vacía. Regístrate desde `/register` indicando un identificador de negocio (3–50 letras minúsculas, números o guiones): se crea el tenant y tu usuario como `Owner`. Después crea un negocio con servicios y empleados, y prueba la reserva pública en `http://localhost:5173/book/<identificador>`.
 
 ---
 
-## 🔑 Credenciales de prueba
+## Endpoints principales
 
-| Rol | Email | Contraseña | Subdominio |
-|-----|-------|-----------|-----------|
-| Owner | carlos@test.com | Password123! | mi-peluqueria |
-| SuperAdmin | superadmin@bookingapp.com | Admin123! | superadmin |
-
----
-
-## 🐳 Docker
-
-```bash
-# Levantar todo en producción
-docker-compose up --build -d
-
-# Ver logs de la API
-docker logs bookingapp_api
-
-# Conectarse a PostgreSQL
-docker exec -it bookingapp_db psql -U booking_user -d bookingapp
-
-# Parar todos los servicios
-docker-compose down
-```
-
----
-
-## 🔌 API Endpoints principales
-
-| Método | Endpoint | Auth | Descripción |
-|--------|----------|------|-------------|
-| POST | `/api/Auth/register` | Público | Registro de usuario |
-| POST | `/api/Auth/login` | Público | Login + JWT |
-| GET | `/api/Profile` | JWT | Ver perfil |
-| GET | `/api/Business` | JWT | Listar negocios |
-| POST | `/api/Business` | Owner | Crear negocio |
-| GET | `/api/Availability` | Público | Slots disponibles |
+| Método | Endpoint | Acceso | Descripción |
+|--------|----------|--------|-------------|
+| POST | `/api/Auth/register` | Público | Registro de un negocio nuevo (tenant + Owner) |
+| POST | `/api/Auth/login` | Público | Login, devuelve JWT |
+| GET / PUT | `/api/Profile` | JWT | Ver y editar perfil |
+| GET / POST | `/api/Business` | JWT / Owner | Listar y crear negocios |
+| GET / POST | `/api/Business/{id}/staff` | Owner, Staff | Empleados del negocio |
+| GET / POST | `/api/Business/{id}/services` | JWT / Owner, Staff | Servicios del negocio |
+| GET | `/api/Availability` | Público | Huecos disponibles |
 | POST | `/api/Bookings` | JWT | Crear reserva |
-| GET | `/api/Admin/dashboard` | Owner | Estadísticas |
-| GET | `/api/Export/excel` | Owner | Exportar Excel |
-| GET | `/api/Export/pdf` | Owner | Exportar PDF |
-| GET | `/api/public/business/:subdomain` | Público | Info pública |
+| GET | `/api/Bookings/my` | JWT | Mis reservas |
+| GET | `/api/Bookings/business/{id}?from=&to=` | Owner, Staff | Reservas del negocio en un rango |
+| DELETE | `/api/Bookings/{id}` | JWT | Cancelar reserva |
+| GET | `/api/Admin/dashboard` | Owner, Staff | Estadísticas |
+| GET | `/api/Export/excel` · `/api/Export/pdf` | Owner | Exportaciones |
+| GET | `/api/public/business/{slug}` | Público | Datos públicos del negocio |
 | POST | `/api/public/book` | Público | Reserva sin cuenta |
-| WS | `/hubs/notifications` | JWT | Notificaciones |
+| POST | `/api/Payments/create-intent` · `/api/Payments/webhook` | JWT · Stripe | Pagos |
+| WS | `/hubs/notifications` | JWT | Notificaciones SignalR |
 
 ---
 
-## 🧪 Tests
+## Tests
 
 ```bash
 dotnet test
 ```
 
-Tests incluidos:
-- `Booking_OverlapsWith_ShouldReturnTrue_WhenOverlapping`
-- `Booking_OverlapsWith_ShouldReturnFalse_WhenNotOverlapping`
-- `Booking_Cancel_ShouldChangeStatus_ToCancelled`
+27 tests (xUnit) que se ejecutan también en GitHub Actions en cada push:
+
+- **Dominio**: solapamiento entre reservas y cambio de estado.
+- **Reservas** (EF Core InMemory): conversión hora local ↔ UTC, solapamientos, reservas consecutivas, horario del negocio, fechas pasadas, reserva pública y aislamiento entre tenants.
+- **Disponibilidad**: huecos de toda la jornada (incluido el último), huecos ocupados y empleados de otro negocio.
+- **Registro y login**: slugs reservados o inválidos, imposibilidad de unirse a un tenant existente y mensajes de error que no revelan qué datos existen.
+
+El workflow de CI compila y prueba el backend y ejecuta lint y build del frontend.
 
 ---
 
-## 📄 Documentación
+## Seguridad
 
-Consulta el archivo [`BookingApp_Documentation.pdf`](./BookingApp_Documentation.pdf) para la documentación técnica completa del proyecto.
+- Los secretos (cadena de conexión, clave JWT, claves de Stripe) no se guardan en el repositorio: se leen de *user-secrets* en desarrollo o de variables de entorno en Docker. La API no arranca si falta la clave JWT o la cadena de conexión.
+- El registro siempre crea un tenant nuevo con rol `Owner`; los identificadores reservados (`superadmin`, `admin`…) no se pueden registrar.
+
+## Próximos pasos
+
+- Proveedor de email real para confirmaciones y recordatorios.
+- Flujo de pago en el frontend con Stripe Elements.
+- Restricción de exclusión en PostgreSQL para impedir reservas solapadas en peticiones concurrentes.
+- Filtros globales de EF Core por tenant.
 
 ---
 
-## 👤 Autor
+## Autor
 
-**Anass El Morabit**
-- GitHub: [@ANASSELMORABIT](https://github.com/ANASSELMORABIT)
+**Anass El Morabit** · [github.com/ANASSELMORABIT](https://github.com/ANASSELMORABIT)
 
----
-
-## 📝 Licencia
-
-Este proyecto es de uso educativo y portfolio. Todos los derechos reservados © 2026 Anass El Morabit.
+Proyecto de uso educativo y de portfolio.
