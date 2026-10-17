@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { adminApi } from '@/api/admin'
 import { businessApi } from '@/api/business'
-import { useAuth } from '@/context/AuthContext'
 import { getBusinessConfig } from '@/lib/businessIcons'
 import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
@@ -16,7 +15,6 @@ import {
 const COLORS = ['#7C3AED', '#3B82F6', '#10B981', '#F59E0B', '#EF4444']
 
 export function StatsPage() {
-  const { user } = useAuth()
   const [selectedBusinessId, setSelectedBusinessId] = useState<string | undefined>()
   const [period, setPeriod] = useState<'week' | 'month' | '3months'>('month')
 
@@ -25,7 +23,7 @@ export function StatsPage() {
     queryFn: businessApi.getAll,
   })
 
-  const { data: stats, isLoading: statsLoading } = useQuery({
+  const { data: stats } = useQuery({
     queryKey: ['dashboard', selectedBusinessId],
     queryFn: () => adminApi.getDashboard(selectedBusinessId),
     refetchInterval: 30000, // Refresca cada 30 segundos
@@ -78,7 +76,7 @@ export function StatsPage() {
     ingresos: s.totalRevenue,
   })) ?? []
 
-  const staffChartData = (staffStats as any[])?.map((s: any) => ({
+  const staffChartData = staffStats?.map(s => ({
     name: s.staffName.split(' ')[0],
     completadas: s.completedBookings,
     canceladas: s.cancelledBookings,
@@ -196,16 +194,16 @@ export function StatsPage() {
         </div>
         {periodLoading ? (
           <div className="flex items-center justify-center h-48 text-slate-500 text-sm">Cargando datos...</div>
-        ) : periodData && (periodData as any[]).length > 0 ? (
+        ) : periodData && periodData.length > 0 ? (
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={periodData as any[]}>
+            <BarChart data={periodData}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
               <XAxis dataKey="date" tick={{ fill: '#64748b', fontSize: 11 }}
                 tickFormatter={(v: string) => new Date(v).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} />
               <YAxis tick={{ fill: '#64748b', fontSize: 11 }} />
               <Tooltip
                 contentStyle={{ background: '#0d0d14', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, color: '#fff' }}
-                labelFormatter={(v: any) => new Date(v).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })} />
+                labelFormatter={(v) => new Date(v).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })} />
               <Legend wrapperStyle={{ color: '#94a3b8', fontSize: 12 }} />
               <Bar dataKey="confirmed" name="Confirmadas" fill="#7C3AED" radius={[4, 4, 0, 0]} />
               <Bar dataKey="cancelled" name="Canceladas" fill="#EF4444" radius={[4, 4, 0, 0]} />
@@ -224,17 +222,17 @@ export function StatsPage() {
             <DollarSign size={16} className="text-emerald-400" />
             <h3 className="text-white font-semibold text-sm">Ingresos por día</h3>
           </div>
-          {periodData && (periodData as any[]).length > 0 ? (
+          {periodData && periodData.length > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={periodData as any[]}>
+              <LineChart data={periodData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                 <XAxis dataKey="date" tick={{ fill: '#64748b', fontSize: 11 }}
                   tickFormatter={(v: string) => new Date(v).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} />
                 <YAxis tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={(v: number) => `${v}€`} />
                 <Tooltip
                   contentStyle={{ background: '#0d0d14', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, color: '#fff' }}
-                  formatter={(v: any) => [`${v}€`, 'Ingresos']}
-                  labelFormatter={(v: any) => new Date(v).toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })} />
+                  formatter={(v) => [`${v}€`, 'Ingresos']}
+                  labelFormatter={(v) => new Date(v).toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })} />
                 <Line type="monotone" dataKey="revenue" stroke="#10B981" strokeWidth={2}
                   dot={{ fill: '#10B981', r: 3 }} activeDot={{ r: 5 }} />
               </LineChart>

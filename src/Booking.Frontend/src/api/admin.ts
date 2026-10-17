@@ -1,5 +1,5 @@
 import client from './client'
-import type { DashboardStats, BookingsByPeriod } from '@/types'
+import type { DashboardStats, BookingsByPeriod, StaffStats } from '@/types'
 
 export const adminApi = {
   getDashboard: (businessId?: string) =>
@@ -13,7 +13,7 @@ export const adminApi = {
     }).then(r => r.data),
 
   getStaffStats: (businessId: string) =>
-    client.get(`/Admin/staff-stats/${businessId}`).then(r => r.data),
+    client.get<StaffStats[]>(`/Admin/staff-stats/${businessId}`).then(r => r.data),
 
   exportExcel: (from: string, to: string) =>
     client.get('/Export/excel', {

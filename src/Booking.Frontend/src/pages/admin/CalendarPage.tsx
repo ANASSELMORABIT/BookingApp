@@ -9,6 +9,8 @@ import { bookingsApi } from '@/api/bookings'
 import { getBusinessConfig } from '@/lib/businessIcons'
 import { ChevronLeft, ChevronRight, Calendar, Scissors } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
+import type { DatesSetArg, EventClickArg } from '@fullcalendar/core'
+import type { Booking } from '@/types'
 
 const STATUS_COLORS: Record<string, string> = {
   Pending:   '#7C3AED',
@@ -18,13 +20,13 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 export function CalendarPage() {
-  const calendarRef = useRef<any>(null)
+  const calendarRef = useRef<FullCalendar>(null)
   const [currentTitle, setCurrentTitle] = useState('')
   const [selectedStaffId, setSelectedStaffId] = useState<string>('all')
   const [selectedServiceId, setSelectedServiceId] = useState<string>('all')
   const [selectedBusinessId, setSelectedBusinessId] = useState<string | null>(null)
   const [view, setView] = useState<'dayGridMonth' | 'timeGridWeek' | 'timeGridDay'>('timeGridWeek')
-  const [selectedBooking, setSelectedBooking] = useState<any>(null)
+  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
 
   const { data: businesses } = useQuery({
     queryKey: ['businesses'],
@@ -47,45 +49,23 @@ export function CalendarPage() {
     enabled: !!activeBusiness,
   })
 
-  // const { data: bookings } = useQuery({
-  //   queryKey: ['my-bookings'],
-  //   queryFn: bookingsApi.getMyBookings,
-  
-  // })
-
-
   const { user } = useAuth()
+  const canSeeBusinessBookings = ['SuperAdmin', 'Owner', 'Staff'].includes(user?.role ?? '')
 
-const { data: bookings } = useQuery({
-  queryKey: ['calendar-bookings', activeBusiness?.id, user?.role],
-  queryFn: async () => {
-    if (user?.role === 'SuperAdmin' || user?.role === 'Owner' || user?.role === 'Staff') {
-      // Usar el endpoint de negocio para ver todas las reservas
-      if (!activeBusiness) return []
-      const today = new Date()
-      const results = []
-      // Pedir los próximos 60 días y los últimos 30
-      for (let i = -30; i <= 60; i++) {
-        const d = new Date(today)
-        d.setDate(d.getDate() + i)
-        const dateStr = d.toISOString().split('T')[0]
-        try {
-          const res = await fetch(`/api/Bookings/business/${activeBusiness.id}?date=${dateStr}`, {
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-          })
-          if (res.ok) {
-            const data = await res.json()
-            results.push(...data)
-          }
-        } catch {}
+  // Reservas del negocio de los últimos 30 días y los próximos 60, en una sola petición
+  const { data: bookings } = useQuery({
+    queryKey: ['calendar-bookings', activeBusiness?.id, user?.role],
+    queryFn: () => {
+      if (!canSeeBusinessBookings) return bookingsApi.getMyBookings()
+      const toIsoDate = (offsetDays: number) => {
+        const d = new Date()
+        d.setDate(d.getDate() + offsetDays)
+        return d.toISOString().split('T')[0]
       }
-      // Deduplicar por ID
-      return [...new Map(results.map((b: any) => [b.id, b])).values()]
-    }
-    return bookingsApi.getMyBookings()
-  },
-  enabled: true,
-})
+      return bookingsApi.getByBusiness(activeBusiness!.id, toIsoDate(-30), toIsoDate(60))
+    },
+    enabled: !canSeeBusinessBookings || !!activeBusiness,
+  })
 
   const events = (bookings ?? [])
     .filter(b => selectedStaffId === 'all' || b.staffName === staff?.find(s => s.id === selectedStaffId)?.name)
@@ -252,7 +232,6 @@ const { data: bookings } = useQuery({
           .calendar-dark .fc-daygrid-day:hover { background: rgba(255,255,255,0.02); }
           .calendar-dark a { color: inherit; text-decoration: none; }
         `}</style>
-        {/* @ts-ignore */}
         <FullCalendar
           ref={calendarRef}
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
@@ -265,10 +244,10 @@ const { data: bookings } = useQuery({
           slotMaxTime="22:00:00"
           allDaySlot={false}
           nowIndicator={true}
-          eventClick={(info: any) => {
-            setSelectedBooking(info.event.extendedProps.booking)
+          eventClick={(info: EventClickArg) => {
+            setSelectedBooking(info.event.extendedProps.booking as Booking)
           }}
-          datesSet={(info: any) => setCurrentTitle(info.view.title)}
+          datesSet={(info: DatesSetArg) => setCurrentTitle(info.view.title)}
           slotLabelFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
           eventTimeFormat={{ hour: '2-digit', minute: '2-digit', hour12: false }}
         />

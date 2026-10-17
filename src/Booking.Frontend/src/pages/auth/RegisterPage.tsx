@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Eye, EyeOff, Calendar, Users, Sparkles, BarChart3 } from 'lucide-react'
+import { isAxiosError } from 'axios'
 
 export function RegisterPage() {
   const { login } = useAuth()
@@ -23,8 +24,9 @@ export function RegisterPage() {
       const data = await authApi.register(form)
       login(data)
       navigate('/dashboard')
-    } catch {
-      setError('Error al registrarse. El email puede estar ya en uso.')
+    } catch (err) {
+      const message = isAxiosError<{ message?: string }>(err) ? err.response?.data?.message : undefined
+      setError(message ?? 'No se pudo completar el registro. Inténtalo de nuevo.')
     } finally {
       setLoading(false)
     }
@@ -112,7 +114,7 @@ export function RegisterPage() {
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-slate-300 text-sm">Subdominio</Label>
+                <Label className="text-slate-300 text-sm">Identificador del negocio</Label>
                 <Input
                   placeholder="mi-peluqueria"
                   value={form.subdomain}

@@ -6,10 +6,10 @@ import { getBusinessConfig } from '@/lib/businessIcons'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
-import type { PublicBusiness, PublicService, PublicStaff, TimeSlot } from '@/types'
+import type { PublicBooking as PublicBookingResult, PublicBusiness, PublicService, PublicStaff, TimeSlot } from '@/types'
 import {
   Calendar, Clock, User, Scissors, CheckCircle,
-  Phone, MapPin, ChevronRight, ChevronLeft, Star
+  Phone, MapPin, ChevronRight, ChevronLeft
 } from 'lucide-react'
 
 type Step = 1 | 2 | 3 | 4
@@ -23,7 +23,7 @@ export function PublicBookingPage() {
   const [selectedDate, setSelectedDate] = useState('')
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null)
   const [form, setForm] = useState({ fullName: '', email: '', phone: '', notes: '' })
-  const [confirmed, setConfirmed] = useState<any>(null)
+  const [confirmed, setConfirmed] = useState<PublicBookingResult | null>(null)
 
   const { data: businesses, isLoading, error } = useQuery({
     queryKey: ['public-business', subdomain],

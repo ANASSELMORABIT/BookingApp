@@ -19,4 +19,9 @@ export default defineConfig([
       globals: globals.browser,
     },
   },
+  {
+    // Componentes de shadcn/ui y contextos exportan también helpers (variants, hooks)
+    files: ['src/components/ui/**/*.tsx', 'src/context/**/*.tsx'],
+    rules: { 'react-refresh/only-export-components': 'off' },
+  },
 ])

@@ -79,7 +79,7 @@ export function BookingsPage() {
         queryClient.invalidateQueries({ queryKey: ['my-bookings'] })
         queryClient.invalidateQueries({ queryKey: ['availability'] })
       },
-      onError: (error: any) => {
+      onError: (error: unknown) => {
         console.error('Error cancelando:', error)
       }
   })

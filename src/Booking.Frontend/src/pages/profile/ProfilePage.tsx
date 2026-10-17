@@ -1,14 +1,12 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { profileApi } from '@/api/profile'
-import { useAuth } from '@/context/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { User, Mail, Phone, Shield, Lock, Save, Building2 } from 'lucide-react'
 
 export function ProfilePage() {
-  const { user: authUser } = useAuth()
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState<'info' | 'password'>('info')
   const [success, setSuccess] = useState('')

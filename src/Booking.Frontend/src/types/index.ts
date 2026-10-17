@@ -136,6 +136,14 @@ export interface PublicService {
   price: number
 }
 
+export interface PublicBooking {
+  bookingId: string
+  serviceName: string
+  startTime: string
+  endTime: string
+  message: string
+}
+
 export interface PublicStaff {
   id: string
   name: string

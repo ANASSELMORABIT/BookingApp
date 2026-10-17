@@ -1,4 +1,5 @@
 import axios from 'axios'
+import type { PublicBooking, PublicBusiness, TimeSlot } from '@/types'
 
 const publicClient = axios.create({
   baseURL: '/api/public',
@@ -7,10 +8,10 @@ const publicClient = axios.create({
 
 export const publicApi = {
   getBusiness: (subdomain: string) =>
-    publicClient.get(`/business/${subdomain}`).then(r => r.data),
+    publicClient.get<PublicBusiness[]>(`/business/${subdomain}`).then(r => r.data),
 
   getAvailability: (serviceId: string, staffId: string, date: string) =>
-    publicClient.get('/availability', {
+    publicClient.get<TimeSlot[]>('/availability', {
       params: { serviceId, staffId, date }
     }).then(r => r.data),
 
@@ -22,5 +23,5 @@ export const publicApi = {
     email: string
     phone?: string
     notes?: string
-  }) => publicClient.post('/book', data).then(r => r.data),
+  }) => publicClient.post<PublicBooking>('/book', data).then(r => r.data),
 }

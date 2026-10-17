@@ -10,6 +10,11 @@ export const bookingsApi = {
   create: (data: { serviceId: string; staffId: string; startTime: string; notes?: string }) =>
     client.post<Booking>('/Bookings', data).then(r => r.data),
 
+  getByBusiness: (businessId: string, from: string, to: string) =>
+    client.get<Booking[]>(`/Bookings/business/${businessId}`, {
+      params: { from, to }
+    }).then(r => r.data),
+
   getMyBookings: () =>
     client.get<Booking[]>('/Bookings/my').then(r => r.data),
 
