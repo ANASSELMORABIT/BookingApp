@@ -15,7 +15,8 @@ public interface IBusinessService
     Task<StaffResponseDto> AddStaffAsync(Guid businessId, CreateStaffDto dto, Guid tenantId, string role = "Owner");
     Task ToggleStaffAsync(Guid staffId, Guid tenantId, string role = "Owner");
 
-    Task<IEnumerable<ServiceResponseDto>> GetServicesAsync(Guid businessId);
+    Task<IEnumerable<ServiceResponseDto>> GetServicesAsync(Guid businessId, Guid tenantId, string role);
+    Task<IEnumerable<PublicBusinessDto>> GetPublicBusinessesAsync(string slug);
     Task<ServiceResponseDto> CreateServiceAsync(Guid businessId, CreateServiceDto dto, Guid tenantId, string requesterRole);
     Task<ServiceResponseDto> UpdateServiceAsync(Guid serviceId, UpdateServiceDto dto, Guid tenantId, string requesterRole);
     Task DeleteServiceAsync(Guid serviceId, Guid tenantId, string requesterRole);

@@ -123,12 +123,47 @@ public class BusinessService : IBusinessService
         await _context.SaveChangesAsync();
     }
 
-    public async Task<IEnumerable<ServiceResponseDto>> GetServicesAsync(Guid businessId)
+    public async Task<IEnumerable<ServiceResponseDto>> GetServicesAsync(Guid businessId, Guid tenantId, string role)
     {
+        var businessExists = await BusinessQuery(tenantId, role)
+            .AnyAsync(b => b.Id == businessId);
+        if (!businessExists)
+            throw new InvalidOperationException("Negocio no encontrado.");
+
         var services = await _context.Services
             .Where(s => s.BusinessId == businessId)
             .ToListAsync();
         return services.Select(MapServiceToDto);
+    }
+
+    public async Task<IEnumerable<PublicBusinessDto>> GetPublicBusinessesAsync(string slug)
+    {
+        var tenant = await _context.Tenants
+            .FirstOrDefaultAsync(t => t.Subdomain == slug.Trim().ToLower() && t.IsActive)
+            ?? throw new InvalidOperationException("Negocio no encontrado.");
+
+        var businesses = await _context.Businesses
+            .Include(b => b.Services.Where(s => s.IsActive))
+            .Include(b => b.Staff.Where(s => s.IsActive))
+            .Where(b => b.TenantId == tenant.Id)
+            .ToListAsync();
+
+        return businesses.Select(b => new PublicBusinessDto
+        {
+            Id        = b.Id,
+            Name      = b.Name,
+            Category  = b.Category,
+            Phone     = b.Phone,
+            Address   = b.Address,
+            OpenTime  = b.OpenTime.ToString("HH:mm"),
+            CloseTime = b.CloseTime.ToString("HH:mm"),
+            Services  = b.Services.Select(s => new PublicServiceDto
+            {
+                Id = s.Id, Name = s.Name, Description = s.Description,
+                DurationMinutes = s.DurationMinutes, Price = s.Price
+            }).ToList(),
+            Staff = b.Staff.Select(s => new PublicStaffDto { Id = s.Id, Name = s.Name }).ToList()
+        });
     }
 
     public async Task<ServiceResponseDto> CreateServiceAsync(Guid businessId, CreateServiceDto dto,

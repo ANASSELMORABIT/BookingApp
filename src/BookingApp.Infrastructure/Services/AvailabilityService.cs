@@ -15,57 +15,49 @@ public class AvailabilityService : IAvailabilityService
         _context = context;
     }
 
-   public async Task<IEnumerable<TimeSlotDto>> GetAvailableSlotsAsync(
-    AvailabilityRequestDto request)
+    /// <summary>
+    /// Devuelve los huecos del día para un servicio y un empleado, en hora local del negocio.
+    /// Los huecos duran lo mismo que el servicio y van desde la apertura hasta el cierre.
+    /// </summary>
+    public async Task<IEnumerable<TimeSlotDto>> GetAvailableSlotsAsync(AvailabilityRequestDto request)
     {
         var service = await _context.Services
             .Include(s => s.Business)
-            .FirstOrDefaultAsync(s => s.Id == request.ServiceId)
+            .FirstOrDefaultAsync(s => s.Id == request.ServiceId && s.IsActive)
             ?? throw new InvalidOperationException("Servicio no encontrado.");
 
-        var timeZone = TimeZoneInfo.FindSystemTimeZoneById("Europe/Madrid");
+        var staffValid = await _context.Staff
+            .AnyAsync(s => s.Id == request.StaffId && s.BusinessId == service.BusinessId && s.IsActive);
+        if (!staffValid)
+            throw new InvalidOperationException("El empleado no pertenece a este negocio.");
 
-        // Construir open/close en local y convertir a UTC directamente
-        var openLocal  = request.Date.ToDateTime(service.Business.OpenTime);
-        var closeLocal = request.Date.ToDateTime(service.Business.CloseTime);
+        // Apertura y cierre en hora local, convertidos a UTC (las reservas se guardan en UTC)
+        var openUtc  = BusinessTime.LocalToUtc(request.Date.ToDateTime(service.Business.OpenTime));
+        var closeUtc = BusinessTime.LocalToUtc(request.Date.ToDateTime(service.Business.CloseTime));
 
-        var current = TimeZoneInfo.ConvertTimeToUtc(openLocal,  timeZone);
-        var end     = TimeZoneInfo.ConvertTimeToUtc(closeLocal, timeZone);
-
-
-        // El rango de búsqueda de bookings usa estos mismos límites
         var existingBookings = await _context.Bookings
             .Where(b => b.StaffId == request.StaffId
-                    && b.StartTime >= current   // <-- ya es UTC correcto
-                    && b.EndTime   <= end
-                    && b.Status != BookingStatus.Cancelled)
-            .OrderBy(b => b.StartTime)
+                     && b.Status != BookingStatus.Cancelled
+                     && b.StartTime < closeUtc
+                     && b.EndTime > openUtc)
             .ToListAsync();
 
-
-        
-        Console.WriteLine($"********************* Buscando bookings entre {current} UTC y {end} UTC para staff {request.StaffId}");
-        Console.WriteLine($"*********************Bookings encontrados: {existingBookings.Count}");
-        foreach (var eb in existingBookings)
-            Console.WriteLine($"*********************  → {eb.StartTime} - {eb.EndTime} | Status: {eb.Status} ***********************");
+        var now = DateTime.UtcNow;
         var slots = new List<TimeSlotDto>();
+        var current = openUtc;
 
-        while (current.AddMinutes(service.DurationMinutes) < end)
+        while (current.AddMinutes(service.DurationMinutes) <= closeUtc)
         {
             var slotEnd = current.AddMinutes(service.DurationMinutes);
 
-            // Convertir el UTC del slot a hora local de Madrid para devolverlo al frontend
-            var slotStartLocal = TimeZoneInfo.ConvertTime(current, TimeZoneInfo.Utc, timeZone);
-            var slotEndLocal = TimeZoneInfo.ConvertTime(slotEnd, TimeZoneInfo.Utc, timeZone);
-
             slots.Add(new TimeSlotDto
             {
-                StartTime   = slotStartLocal,
-                EndTime     = slotEndLocal,
-                IsAvailable = !existingBookings.Any(b => b.OverlapsWith(current, slotEnd))
+                StartTime   = BusinessTime.UtcToLocal(current),
+                EndTime     = BusinessTime.UtcToLocal(slotEnd),
+                IsAvailable = current > now && !existingBookings.Any(b => b.OverlapsWith(current, slotEnd))
             });
 
-            current = current.AddMinutes(service.DurationMinutes);
+            current = slotEnd;
         }
 
         return slots;

@@ -139,8 +139,15 @@ public class BusinessController : ControllerBase
     [Authorize(Policy = "AllRoles")]
     public async Task<IActionResult> GetServices(Guid id)
     {
-        var result = await _businessService.GetServicesAsync(id);
-        return Ok(result);
+        try
+        {
+            var result = await _businessService.GetServicesAsync(id, TenantId, Role);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
     }
 
     [HttpPost("{id}/services")]

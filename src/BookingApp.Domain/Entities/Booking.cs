@@ -21,15 +21,22 @@ public class Booking : BaseEntity
     protected Booking() { }
 
     public static Booking Create(Guid serviceId, Guid staffId, Guid clientId,
-        DateTime startTime, int durationMinutes)
+        DateTime startTime, int durationMinutes, string? notes = null)
     {
+        if (durationMinutes <= 0)
+            throw new ArgumentOutOfRangeException(nameof(durationMinutes), "La duración debe ser positiva.");
+
+        if (notes?.Length > 500)
+            throw new InvalidOperationException("Las notas no pueden superar los 500 caracteres.");
+
         return new Booking
         {
             ServiceId = serviceId,
             StaffId = staffId,
             ClientId = clientId,
             StartTime = startTime,
-            EndTime = startTime.AddMinutes(durationMinutes)
+            EndTime = startTime.AddMinutes(durationMinutes),
+            Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim()
         };
     }
 

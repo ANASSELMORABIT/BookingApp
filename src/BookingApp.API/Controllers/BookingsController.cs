@@ -26,7 +26,9 @@ public class BookingsController : ControllerBase
             var clientId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
             var tenantId = Guid.Parse(User.FindFirstValue("tenant_id")!);
 
-            var result = await _bookingService.CreateAsync(dto, clientId, tenantId);
+            var role = User.FindFirstValue(ClaimTypes.Role)!;
+
+            var result = await _bookingService.CreateAsync(dto, clientId, tenantId, role);
             return Ok(result);
         }
         catch (InvalidOperationException ex)
@@ -43,11 +45,31 @@ public class BookingsController : ControllerBase
         return Ok(bookings);
     }
 
+    // GET /api/Bookings/business/{id}?date=2026-05-20  o  ?from=2026-05-01&to=2026-05-31
     [HttpGet("business/{businessId}")]
-    public async Task<IActionResult> GetByBusiness(Guid businessId, [FromQuery] DateOnly date)
+    [Authorize(Policy = "OwnerOrStaff")]
+    public async Task<IActionResult> GetByBusiness(
+        Guid businessId,
+        [FromQuery] DateOnly? date,
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to)
     {
-        var bookings = await _bookingService.GetByBusinessAsync(businessId, date);
-        return Ok(bookings);
+        var start = date ?? from;
+        var end   = date ?? to ?? from;
+        if (start is null || end is null)
+            return BadRequest(new { message = "Indica 'date' o el rango 'from' y 'to'." });
+
+        try
+        {
+            var tenantId = Guid.Parse(User.FindFirstValue("tenant_id")!);
+            var role = User.FindFirstValue(ClaimTypes.Role)!;
+            var bookings = await _bookingService.GetByBusinessAsync(businessId, start.Value, end.Value, tenantId, role);
+            return Ok(bookings);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [HttpDelete("{id}")]
