@@ -22,11 +22,15 @@ API REST en **ASP.NET Core (.NET 10)** con **EF Core + PostgreSQL**, y SPA en **
 - **Motor de disponibilidad**: genera los huecos del día según el horario del negocio y la duración del servicio, marca como ocupados los que se solapan con reservas existentes del empleado y convierte entre UTC y la zona horaria del negocio (`Europe/Madrid`).
 - **Validación de reservas** común a la reserva autenticada y a la pública: empleado del mismo negocio, dentro del horario, no en el pasado y sin solapamientos con otras reservas del empleado.
 - **Página pública de reserva** (`/book/:slug`) en cuatro pasos: servicio y empleado → fecha y hora → datos personales → confirmación.
+- **Página de inicio con escena 3D** (`/`): presentación del producto con una escena WebGL (React Three Fiber) ligada al scroll, en la que las citas pasan "del caos al orden", y secciones de público, funciones y pasos. La escena se descarga aparte y solo en escritorio; en móvil, con "reducir movimiento" o sin WebGL se muestra una versión estática.
+- **Agenda** (`/agenda`): reservas del negocio de hoy, 7 o 30 días, agrupadas por día, con resumen (pendientes, confirmadas, ingresos previstos), filtros por estado, empleado y búsqueda, y aviso de la cita en curso y la siguiente.
+- **Página pública para compartir** (`/share`): el enlace de reservas del negocio con botones para copiar, compartir y abrir, una vista previa de lo que verá el cliente y una lista de comprobación (negocio, servicios y equipo) antes de difundirlo.
 - **Calendario** de reservas con vistas de mes, semana y día (FullCalendar).
 - **Dashboard y estadísticas**: KPIs, gráficas con Recharts, ranking de servicios y rendimiento por empleado, con filtros por negocio y periodo.
 - **Exportación** de reservas a Excel (ClosedXML) y de estadísticas a PDF (QuestPDF).
 - **Notificaciones en tiempo real** con SignalR al crear o cancelar reservas.
 - **Job recurrente con Hangfire** (cada hora) que localiza las reservas confirmadas de las próximas 24 h para enviar recordatorios.
+- **Interfaz adaptable y en español**: menú lateral que en móvil pasa a menú desplegable, estados de reserva y pago traducidos con colores comunes, confirmación antes de cancelar, avisos de éxito o error (Sonner), esqueletos de carga, estados vacíos con acción y página 404.
 
 **Parciales / en desarrollo**
 
@@ -48,6 +52,7 @@ API REST en **ASP.NET Core (.NET 10)** con **EF Core + PostgreSQL**, y SPA en **
 | Documentación API | OpenAPI + Scalar (entorno Development) |
 | Frontend | React 19, TypeScript, Vite, React Router 7, TanStack Query, Axios |
 | UI | Tailwind CSS 4, componentes shadcn/ui (Radix), Recharts, FullCalendar, Sonner |
+| 3D | three.js, React Three Fiber, drei (solo en la página de inicio, cargado aparte) |
 | Tests y CI | xUnit, EF Core InMemory, GitHub Actions |
 
 ---
@@ -69,6 +74,36 @@ tests/
 
 - Las entidades encapsulan su estado (setters privados y métodos de fábrica como `Booking.Create`), y la lógica de solapamiento vive en el dominio (`Booking.OverlapsWith`).
 - Las fechas se guardan en UTC y se convierten a la zona horaria del negocio al calcular y devolver los huecos.
+
+### Frontend
+
+```
+src/Booking.Frontend/src/
+├── api/                 Clientes de la API (Axios) por área
+├── components/
+│   ├── app/             Piezas comunes del panel: cabecera, estados, carga, vacíos, confirmación
+│   ├── landing/         Barra, tarjetas con inclinación y apariciones de la página de inicio
+│   ├── layout/          Layout del panel, menú lateral y notificaciones
+│   ├── three/           Escena 3D de la página de inicio
+│   └── ui/              Componentes shadcn/ui
+├── hooks/               Notificaciones (SignalR), progreso de scroll, detección de 3D
+├── lib/                 Textos de estados y roles, iconos por tipo de negocio, utilidades
+└── pages/               Pantallas por área (auth, admin, booking, profile, public)
+```
+
+| Ruta | Pantalla | Acceso |
+|------|----------|--------|
+| `/` | Página de inicio (con sesión iniciada lleva al panel) | Público |
+| `/login` · `/register` | Inicio de sesión y registro | Público |
+| `/book/:slug` | Reserva pública | Público |
+| `/dashboard` | KPIs, rendimiento del equipo y servicios más populares | Owner, Staff |
+| `/agenda` | Reservas del negocio por día | Owner, Staff |
+| `/calendar` | Calendario de reservas | Owner, Staff |
+| `/bookings` | Mis reservas y nueva reserva | Owner, Staff, Client |
+| `/business` · `/services` | Negocios, equipo y servicios | Owner (servicios también Staff) |
+| `/stats` | Estadísticas y exportación | Owner |
+| `/share` | Enlace público de reservas | Owner |
+| `/profile` | Perfil y contraseña | Todos |
 
 ---
 
@@ -123,11 +158,11 @@ npm install
 npm run dev
 ```
 
-Aplicación en `http://localhost:5173` (Vite redirige `/api` al backend).
+Aplicación en `http://localhost:5173` (Vite redirige `/api` al backend). La escena 3D de la página de inicio solo se carga en pantallas de 1024 px o más.
 
 ### 6. Datos de prueba
 
-La base de datos arranca vacía. Regístrate desde `/register` indicando un identificador de negocio (3–50 letras minúsculas, números o guiones): se crea el tenant y tu usuario como `Owner`. Después crea un negocio con servicios y empleados, y prueba la reserva pública en `http://localhost:5173/book/<identificador>`.
+La base de datos arranca vacía. Regístrate desde `/register` indicando un identificador de negocio (3–50 letras minúsculas, números o guiones): se crea el tenant y tu usuario como `Owner`. Después crea un negocio con servicios y empleados, y prueba la reserva pública en `http://localhost:5173/book/<identificador>`. La pantalla **Página pública** (`/share`) muestra ese enlace y comprueba si al negocio le falta algo para recibir reservas.
 
 ---
 
@@ -183,6 +218,8 @@ El workflow de CI compila y prueba el backend y ejecuta lint y build del fronten
 - Flujo de pago en el frontend con Stripe Elements.
 - Restricción de exclusión en PostgreSQL para impedir reservas solapadas en peticiones concurrentes.
 - Filtros globales de EF Core por tenant.
+- Endpoints para que el negocio confirme, complete o cancele las reservas de sus clientes (hoy solo puede cancelar quien hizo la reserva), y sus botones en la Agenda.
+- Filtro por negocio en `/api/Admin/bookings-by-period` (la gráfica "Reservas por día" muestra siempre todos los negocios).
 
 ---
 

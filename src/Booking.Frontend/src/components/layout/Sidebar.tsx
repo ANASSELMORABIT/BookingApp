@@ -1,27 +1,46 @@
+import { useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/context/AuthContext'
 import { businessApi } from '@/api/business'
 import { getBusinessConfig } from '@/lib/businessIcons'
+import { roleLabel } from '@/lib/labels'
 import { cn } from '@/lib/utils'
 import {
-  LayoutDashboard, Calendar, User,
-  Building2, LogOut, Scissors, BarChart3, Shield
+  LayoutDashboard, CalendarCheck, CalendarDays, ListChecks, User,
+  Building2, LogOut, Scissors, BarChart3, Shield, Globe, Calendar, X,
 } from 'lucide-react'
 import { NotificationBell } from './NotificationBell'
 
-
-const navItems = [
-  { label: 'Dashboard',    href: '/dashboard', icon: LayoutDashboard, roles: ['Owner', 'Staff', 'SuperAdmin'] },
-  { label: 'Reservas',     href: '/bookings',  icon: Calendar,        roles: ['Owner', 'Staff', 'Client'] },
-  { label: 'Calendario',   href: '/calendar',  icon: Calendar,        roles: ['Owner', 'Staff', 'SuperAdmin'] }, // NUEVA
-  { label: 'Negocios',     href: '/business',  icon: Building2,       roles: ['Owner', 'SuperAdmin'] },
-  { label: 'Servicios', href: '/services', icon: Scissors, roles: ['Owner', 'Staff', 'SuperAdmin'] },
-  { label: 'Estadísticas', href: '/stats',     icon: BarChart3,       roles: ['Owner', 'SuperAdmin'] },
-  { label: 'Perfil',       href: '/profile',   icon: User,            roles: ['Owner', 'Staff', 'Client', 'SuperAdmin'] },
+const navSections = [
+  {
+    title: 'Día a día',
+    items: [
+      { label: 'Dashboard',     href: '/dashboard', icon: LayoutDashboard, roles: ['Owner', 'Staff', 'SuperAdmin'] },
+      { label: 'Agenda',        href: '/agenda',    icon: ListChecks,      roles: ['Owner', 'Staff', 'SuperAdmin'] },
+      { label: 'Calendario',    href: '/calendar',  icon: CalendarDays,    roles: ['Owner', 'Staff', 'SuperAdmin'] },
+      { label: 'Mis reservas',  href: '/bookings',  icon: CalendarCheck,   roles: ['Owner', 'Staff', 'Client'] },
+    ],
+  },
+  {
+    title: 'Gestión',
+    items: [
+      { label: 'Negocios',      href: '/business',  icon: Building2,       roles: ['Owner', 'SuperAdmin'] },
+      { label: 'Servicios',     href: '/services',  icon: Scissors,        roles: ['Owner', 'Staff', 'SuperAdmin'] },
+      { label: 'Estadísticas',  href: '/stats',     icon: BarChart3,       roles: ['Owner', 'SuperAdmin'] },
+      { label: 'Página pública', href: '/share',    icon: Globe,           roles: ['Owner', 'SuperAdmin'] },
+    ],
+  },
+  {
+    title: 'Cuenta',
+    items: [
+      { label: 'Perfil',        href: '/profile',   icon: User,            roles: ['Owner', 'Staff', 'Client', 'SuperAdmin'] },
+    ],
+  },
 ]
 
-export function Sidebar() {
+/** Menú lateral: fijo en escritorio, desplegable en móvil (`open` / `onClose`). */
+export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { user, logout } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
@@ -33,135 +52,150 @@ export function Sidebar() {
   })
 
   const firstBusiness = businesses?.[0]
-  const businessConfig = firstBusiness
-    ? getBusinessConfig(firstBusiness.category)
-    : null
+  const businessConfig = firstBusiness ? getBusinessConfig(firstBusiness.category) : null
+
+  // Cerrar el menú móvil con Escape
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose])
 
   const handleLogout = () => {
     logout()
     navigate('/login')
   }
 
-  const filteredNav = navItems.filter(item =>
-    item.roles.includes(user?.role ?? '')
-  )
+  const role = user?.role ?? ''
+  const sections = navSections
+    .map(s => ({ ...s, items: s.items.filter(i => i.roles.includes(role)) }))
+    .filter(s => s.items.length > 0)
 
   return (
-    <aside className="w-64 h-screen bg-[#0d0d14] border-r border-white/[0.06] text-white flex flex-col fixed left-0 top-0">
+    <>
+      {/* Fondo oscuro del menú móvil */}
+      <div
+        className={cn(
+          'fixed inset-0 z-40 bg-black/60 backdrop-blur-sm transition-opacity duration-300 lg:hidden',
+          open ? 'opacity-100' : 'pointer-events-none opacity-0'
+        )}
+        onClick={onClose}
+        aria-hidden
+      />
 
-      {/* Logo + Business branding */}
-      <div className="p-5 border-b border-white/[0.05]">
-
-        {/* App logo */}
-        <div className="flex items-center gap-3 mb-4">
-          <div className="relative">
-            <div className="w-10 h-10 bg-gradient-to-br from-violet-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-violet-600/30">
-              <Calendar size={18} className="text-white" />
-            </div>
-            <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-[#0d0d14]" />
+      <aside
+        className={cn(
+          'app-sidebar fixed left-0 top-0 z-50 flex h-dvh w-64 flex-col text-white transition-[transform,visibility] duration-300 ease-out lg:visible lg:translate-x-0',
+          open ? 'visible translate-x-0' : 'invisible -translate-x-full'
+        )}
+        aria-label="Menú principal"
+      >
+        {/* Logo + negocio */}
+        <div className="border-b border-white/[0.05] p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <Link to="/dashboard" onClick={onClose} className="flex items-center gap-3 rounded-xl focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-violet-400">
+              <div className="relative">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 shadow-lg shadow-violet-600/30">
+                  <Calendar size={18} className="text-white" />
+                </div>
+                <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[#0d0d14] bg-emerald-500" />
+              </div>
+              <div>
+                <p className="text-base font-semibold tracking-tight text-white">BookingApp</p>
+                <p className="text-[10px] font-medium text-emerald-400">● En línea</p>
+              </div>
+            </Link>
+            <button
+              onClick={onClose}
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-white/5 hover:text-white lg:hidden"
+              aria-label="Cerrar menú"
+            >
+              <X size={16} />
+            </button>
           </div>
-          <div>
-            <h1 className="text-white font-bold text-base tracking-tight">BookingApp</h1>
-            <p className="text-emerald-400 text-[10px] font-medium">● En línea</p>
+
+          {firstBusiness && businessConfig && (
+            <div className={cn('mb-3 flex items-center gap-2.5 rounded-xl border p-2.5', businessConfig.border, businessConfig.bg)}>
+              <div className={cn('flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border', businessConfig.bg, businessConfig.border)}>
+                <businessConfig.icon size={15} className={businessConfig.color} />
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-xs font-semibold text-white">{firstBusiness.name}</p>
+                <p className={cn('text-[10px] font-medium', businessConfig.color)}>{businessConfig.label}</p>
+              </div>
+            </div>
+          )}
+
+          {user?.role === 'SuperAdmin' && (
+            <div className="mb-3 flex items-center gap-2.5 rounded-xl border border-amber-500/20 bg-amber-500/10 p-2.5">
+              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border border-amber-500/20 bg-amber-500/20">
+                <Shield size={15} className="text-amber-400" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-white">Super Admin</p>
+                <p className="text-[10px] text-amber-400">Acceso total</p>
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.04] p-3">
+            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-indigo-500 shadow-md">
+              <span className="text-xs font-bold text-white">{user?.fullName?.charAt(0).toUpperCase()}</span>
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-medium text-white">{user?.fullName}</p>
+              <p className="truncate text-[10px] text-slate-400">{roleLabel(user?.role)}</p>
+            </div>
+            <NotificationBell />
           </div>
         </div>
 
-        {/* Business badge */}
-        {firstBusiness && businessConfig && (
-          <div className={`flex items-center gap-2.5 p-2.5 rounded-xl border ${businessConfig.border} ${businessConfig.bg} mb-3`}>
-            <div className={`w-8 h-8 rounded-lg ${businessConfig.bg} border ${businessConfig.border} flex items-center justify-center flex-shrink-0`}>
-              <businessConfig.icon size={15} className={businessConfig.color} />
+        {/* Navegación */}
+        <nav className="flex-1 space-y-6 overflow-y-auto p-4">
+          {sections.map(section => (
+            <div key={section.title} className="space-y-1">
+              <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-widest text-slate-500">{section.title}</p>
+              {section.items.map(item => {
+                const Icon = item.icon
+                const isActive = location.pathname === item.href
+                return (
+                  <Link
+                    key={item.href}
+                    to={item.href}
+                    onClick={onClose}
+                    aria-current={isActive ? 'page' : undefined}
+                    className={cn(
+                      'nav-link group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors duration-150',
+                      isActive ? 'is-active text-white' : 'text-slate-400 hover:bg-white/[0.04] hover:text-slate-100'
+                    )}
+                  >
+                    <span className={cn(
+                      'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg transition-colors',
+                      isActive ? 'bg-violet-500/25' : 'bg-white/[0.03] group-hover:bg-white/[0.06]'
+                    )}>
+                      <Icon size={15} className={isActive ? 'text-violet-300' : 'text-slate-400'} />
+                    </span>
+                    {item.label}
+                  </Link>
+                )
+              })}
             </div>
-            <div className="min-w-0">
-              <p className="text-white text-xs font-semibold truncate">{firstBusiness.name}</p>
-              <p className={`text-[10px] font-medium ${businessConfig.color}`}>{businessConfig.label}</p>
-            </div>
-          </div>
-        )}
+          ))}
+        </nav>
 
-        {/* SuperAdmin badge */}
-        {user?.role === 'SuperAdmin' && (
-          <div className="flex items-center gap-2.5 p-2.5 rounded-xl border border-amber-500/20 bg-amber-500/10 mb-3">
-            <div className="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/20 flex items-center justify-center flex-shrink-0">
-              <Shield size={15} className="text-amber-400" />
-            </div>
-            <div>
-              <p className="text-white text-xs font-semibold">Super Admin</p>
-              <p className="text-amber-400 text-[10px]">Acceso total</p>
-            </div>
-          </div>
-        )}
-
-        {/* User card */}
-          <div className="flex items-center gap-3 p-3 bg-white/[0.04] border border-white/[0.06] rounded-xl">
-            <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-indigo-500 rounded-lg flex items-center justify-center flex-shrink-0 shadow-md">
-              <span className="text-white text-xs font-bold">
-                {user?.fullName?.charAt(0).toUpperCase()}
-              </span>
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-white text-xs font-medium truncate">{user?.fullName}</p>
-              <p className="text-slate-500 text-[10px] truncate">{user?.email}</p>
-            </div>
-            <div className="flex items-center gap-1.5 flex-shrink-0">
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium whitespace-nowrap border ${
-                user?.role === 'SuperAdmin'
-                  ? 'bg-amber-500/20 text-amber-400 border-amber-500/20'
-                  : 'bg-violet-500/20 text-violet-400 border-violet-500/20'
-              }`}>
-                {user?.role}
-              </span>
-              <NotificationBell />
-            </div>
-          </div>
-      </div>
-
-      {/* Nav */}
-      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-        <p className="text-slate-600 text-[10px] font-semibold uppercase tracking-widest px-3 mb-3">
-          Menú principal
-        </p>
-        {filteredNav.map(item => {
-          const Icon = item.icon
-          const isActive = location.pathname === item.href
-          return (
-            <Link
-              key={item.href}
-              to={item.href}
-              className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-150',
-                isActive
-                  ? 'bg-violet-600/20 text-violet-300 border border-violet-500/20 shadow-sm'
-                  : 'text-slate-500 hover:bg-white/[0.04] hover:text-slate-200'
-              )}
-            >
-              <div className={cn(
-                'w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 transition-all',
-                isActive ? 'bg-violet-600/30' : 'bg-white/[0.03]'
-              )}>
-                <Icon size={15} className={isActive ? 'text-violet-400' : 'text-slate-500'} />
-              </div>
-              {item.label}
-              {isActive && (
-                <div className="ml-auto w-1.5 h-1.5 bg-violet-400 rounded-full" />
-              )}
-            </Link>
-          )
-        })}
-      </nav>
-
-      {/* Logout */}
-      <div className="p-4 border-t border-white/[0.05]">
-        <button
-          onClick={handleLogout}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-slate-500 hover:bg-rose-500/10 hover:text-rose-400 w-full transition-all duration-150 group"
-        >
-          <div className="w-7 h-7 rounded-lg bg-white/[0.03] group-hover:bg-rose-500/20 flex items-center justify-center flex-shrink-0 transition-all">
-            <LogOut size={15} />
-          </div>
-          Cerrar sesión
-        </button>
-      </div>
-    </aside>
+        <div className="border-t border-white/[0.05] p-4">
+          <button
+            onClick={handleLogout}
+            className="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-400 transition-colors duration-150 hover:bg-rose-500/10 hover:text-rose-300"
+          >
+            <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-white/[0.03] transition-colors group-hover:bg-rose-500/20">
+              <LogOut size={15} />
+            </span>
+            Cerrar sesión
+          </button>
+        </div>
+      </aside>
+    </>
   )
 }

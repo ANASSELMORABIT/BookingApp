@@ -8,6 +8,13 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Plus, Users, Scissors, Clock, Phone, MapPin, Pencil, UserPlus, Power } from 'lucide-react'
 import type { Business } from '@/types'
+import { toast } from 'sonner'
+import { PageHeader } from '@/components/app/PageHeader'
+import { PageLoader } from '@/components/app/PageLoader'
+import { EmptyState } from '@/components/app/EmptyState'
+import { Building2 } from 'lucide-react'
+
+const onError = () => toast.error('No se pudo guardar. Revisa los datos e inténtalo de nuevo.')
 
 export function BusinessPage() {
   const queryClient = useQueryClient()
@@ -58,7 +65,9 @@ export function BusinessPage() {
       queryClient.invalidateQueries({ queryKey: ['businesses'] })
       setShowCreateModal(false)
       setNewBusiness({ name: '', category: '', phone: '', address: '', openTime: '09:00', closeTime: '20:00' })
-    }
+      toast.success('Negocio creado')
+    },
+    onError,
   })
 
     const updateMutation = useMutation({
@@ -72,7 +81,9 @@ export function BusinessPage() {
         // Actualiza el negocio seleccionado inmediatamente
         setSelectedBusiness(prev => prev ? { ...prev, ...updatedBusiness } : null)
         setShowEditModal(false)
-      }
+        toast.success('Cambios guardados')
+      },
+      onError,
   })
 
   const addStaffMutation = useMutation({
@@ -81,12 +92,15 @@ export function BusinessPage() {
       queryClient.invalidateQueries({ queryKey: ['staff', selectedBusiness?.id] })
       setShowStaffModal(false)
       setNewStaff({ name: '', email: '' })
-    }
+      toast.success('Persona añadida al equipo')
+    },
+    onError,
   })
 
   const toggleStaffMutation = useMutation({
     mutationFn: (staffId: string) => businessApi.toggleStaff(staffId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['staff', selectedBusiness?.id] })
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['staff', selectedBusiness?.id] }),
+    onError,
   })
 
   const createServiceMutation = useMutation({
@@ -96,32 +110,27 @@ export function BusinessPage() {
       queryClient.invalidateQueries({ queryKey: ['businesses'] })
       setShowServiceModal(false)
       setNewService({ name: '', description: '', durationMinutes: 30, price: 0 })
-    }
+      toast.success('Servicio añadido')
+    },
+    onError,
   })
 
-  if (isLoading) return (
-    <div className="flex items-center justify-center h-64">
-      <div className="flex items-center gap-3 text-slate-400">
-        <span className="w-5 h-5 border-2 border-slate-600 border-t-violet-500 rounded-full animate-spin" />
-        Cargando negocios...
-      </div>
-    </div>
-  )
+  if (isLoading) return <PageLoader label="Cargando negocios…" cards={3} />
 
   return (
     <div className="space-y-6 max-w-7xl">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Negocios</h1>
-          <p className="text-slate-400 mt-1 text-sm">Gestiona tus negocios y sus servicios</p>
-        </div>
-        <Button
-          onClick={() => setShowCreateModal(true)}
-          className="bg-violet-600 hover:bg-violet-500 text-white rounded-xl px-4 h-10 flex items-center gap-2 shadow-lg shadow-violet-600/20"
-        >
-          <Plus size={16} /> Nuevo negocio
-        </Button>
-      </div>
+      <PageHeader
+        title="Negocios"
+        subtitle="Gestiona tus negocios y sus servicios"
+        actions={
+          <Button
+            onClick={() => setShowCreateModal(true)}
+            className="bg-violet-600 hover:bg-violet-500 text-white rounded-xl px-4 h-10 flex items-center gap-2 shadow-lg shadow-violet-600/20"
+          >
+            <Plus size={16} /> Nuevo negocio
+          </Button>
+        }
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
@@ -166,8 +175,12 @@ export function BusinessPage() {
             )
           })}
           {!businesses?.length && (
-            <div className="text-center py-12 text-slate-600 text-sm">
-              No hay negocios aún
+            <div className="bg-white/[0.02] border border-white/[0.06] rounded-2xl">
+              <EmptyState
+                icon={Building2}
+                title="Aún no tienes negocios"
+                text="Crea el primero para añadir servicios, equipo y empezar a recibir reservas."
+              />
             </div>
           )}
         </div>
@@ -207,7 +220,7 @@ export function BusinessPage() {
                       <Pencil size={12} className="mr-1" /> Editar
                     </Button>
                   </div>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     {[
                       { icon: Clock, label: 'Horario', value: `${selectedBusiness.openTime} - ${selectedBusiness.closeTime}` },
                       { icon: Phone, label: 'Teléfono', value: selectedBusiness.phone ?? 'No especificado' },
@@ -319,6 +332,8 @@ export function BusinessPage() {
                         </span>
                         <button
                           onClick={() => toggleStaffMutation.mutate(s.id)}
+                          aria-label={s.isActive ? `Desactivar a ${s.name}` : `Activar a ${s.name}`}
+                          title={s.isActive ? 'Desactivar' : 'Activar'}
                           className="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors"
                         >
                           <Power size={12} className="text-slate-400" />
@@ -334,7 +349,7 @@ export function BusinessPage() {
             )}
           </div>
         ) : (
-          <div className="lg:col-span-2 flex items-center justify-center h-64 text-slate-600 text-sm">
+          <div className="lg:col-span-2 flex items-center justify-center h-64 rounded-2xl border border-dashed border-white/10 text-slate-400 text-sm">
             Selecciona un negocio para ver sus detalles
           </div>
         )}
@@ -342,7 +357,7 @@ export function BusinessPage() {
 
       {/* Modal crear negocio */}
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-        <DialogContent className="bg-[#0d0d14] border border-white/10 text-white rounded-2xl max-w-md">
+        <DialogContent className="app-dialog max-w-md">
           <DialogHeader>
             <DialogTitle className="text-white">Nuevo negocio</DialogTitle>
           </DialogHeader>
@@ -397,7 +412,7 @@ export function BusinessPage() {
 
       {/* Modal editar negocio */}
       <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-        <DialogContent className="bg-[#0d0d14] border border-white/10 text-white rounded-2xl max-w-md">
+        <DialogContent className="app-dialog max-w-md">
           <DialogHeader>
             <DialogTitle className="text-white">Editar negocio</DialogTitle>
           </DialogHeader>
@@ -445,7 +460,7 @@ export function BusinessPage() {
 
       {/* Modal añadir staff */}
       <Dialog open={showStaffModal} onOpenChange={setShowStaffModal}>
-        <DialogContent className="bg-[#0d0d14] border border-white/10 text-white rounded-2xl max-w-sm">
+        <DialogContent className="app-dialog max-w-sm">
           <DialogHeader>
             <DialogTitle className="text-white">Añadir staff</DialogTitle>
           </DialogHeader>
@@ -476,7 +491,7 @@ export function BusinessPage() {
 
       {/* Modal añadir servicio */}
       <Dialog open={showServiceModal} onOpenChange={setShowServiceModal}>
-        <DialogContent className="bg-[#0d0d14] border border-white/10 text-white rounded-2xl max-w-sm">
+        <DialogContent className="app-dialog max-w-sm">
           <DialogHeader>
             <DialogTitle className="text-white">Añadir servicio</DialogTitle>
           </DialogHeader>

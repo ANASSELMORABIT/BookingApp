@@ -8,6 +8,8 @@ import {
   Calendar, TrendingUp, DollarSign, XCircle,
   Users, Star, ArrowUpRight, Activity, Shield
 } from 'lucide-react'
+import { PageHeader } from '@/components/app/PageHeader'
+import { PageLoader } from '@/components/app/PageLoader'
 
 export function DashboardPage() {
   const { user } = useAuth()
@@ -24,33 +26,29 @@ export function DashboardPage() {
     enabled: true, // CAMBIA ESTO — siempre activo
   })
 
-  if (isLoading) return (
-    <div className="flex items-center justify-center h-64">
-      <div className="flex items-center gap-3 text-slate-400">
-        <span className="w-5 h-5 border-2 border-slate-600 border-t-violet-500 rounded-full animate-spin" />
-        Cargando estadísticas...
-      </div>
-    </div>
-  )
+  if (isLoading) return <PageLoader label="Cargando estadísticas…" />
 
   const kpis = [
-    { label: 'Reservas hoy',      value: stats?.bookingsToday ?? 0,                          sub: `${stats?.bookingsThisWeek ?? 0} esta semana`,   icon: Calendar,   color: 'text-violet-400', bg: 'bg-violet-500/10', border: 'border-violet-500/20' },
-    { label: 'Reservas este mes', value: stats?.bookingsThisMonth ?? 0,                       sub: `${stats?.totalBookings ?? 0} en total`,          icon: TrendingUp, color: 'text-blue-400',   bg: 'bg-blue-500/10',   border: 'border-blue-500/20'   },
-    { label: 'Ingresos este mes', value: `${stats?.revenueThisMonth?.toFixed(2) ?? '0.00'}€`, sub: `${stats?.revenueTotal?.toFixed(2) ?? '0.00'}€ total`, icon: DollarSign, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
-    { label: 'Cancelaciones',     value: stats?.cancelledBookings ?? 0,                       sub: `${stats?.cancellationRate ?? 0}% tasa`,          icon: XCircle,    color: 'text-rose-400',   bg: 'bg-rose-500/10',   border: 'border-rose-500/20'   },
+    { label: 'Reservas hoy',      value: stats?.bookingsToday ?? 0,                          sub: `${stats?.bookingsThisWeek ?? 0} esta semana`,   icon: Calendar,   color: 'text-violet-400', bg: 'bg-violet-500/10', border: 'border-violet-500/20', glow: 'rgb(139 92 246 / 0.28)' },
+    { label: 'Reservas este mes', value: stats?.bookingsThisMonth ?? 0,                       sub: `${stats?.totalBookings ?? 0} en total`,          icon: TrendingUp, color: 'text-blue-400',   bg: 'bg-blue-500/10',   border: 'border-blue-500/20',   glow: 'rgb(59 130 246 / 0.25)' },
+    { label: 'Ingresos este mes', value: `${stats?.revenueThisMonth?.toFixed(2) ?? '0.00'}€`, sub: `${stats?.revenueTotal?.toFixed(2) ?? '0.00'}€ total`, icon: DollarSign, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', glow: 'rgb(16 185 129 / 0.22)' },
+    { label: 'Cancelaciones',     value: stats?.cancelledBookings ?? 0,                       sub: `${stats?.cancellationRate ?? 0}% tasa`,          icon: XCircle,    color: 'text-rose-400',   bg: 'bg-rose-500/10',   border: 'border-rose-500/20',   glow: 'rgb(244 63 94 / 0.22)' },
   ]
+
+  const greeting = (() => {
+    const h = new Date().getHours()
+    return h < 14 ? 'Buenos días' : h < 21 ? 'Buenas tardes' : 'Buenas noches'
+  })()
 
   return (
     <div className="space-y-8 max-w-7xl">
 
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-          <p className="text-slate-400 mt-1 text-sm">
-            Bienvenido, <span className="text-white font-medium">{user?.fullName}</span>
-          </p>
-        </div>
+      <div className="flex items-end justify-between flex-wrap gap-4">
+        <PageHeader
+          title="Dashboard"
+          subtitle={<>{greeting}, <span className="text-white font-medium">{user?.fullName}</span></>}
+        />
         <div className="flex items-center gap-3">
           {/* Business selector */}
           {businesses && businesses.length > 0 && (
@@ -96,16 +94,16 @@ export function DashboardPage() {
       {/* KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {kpis.map(kpi => (
-          <div key={kpi.label} className={`bg-white/[0.03] border ${kpi.border} rounded-2xl p-5 backdrop-blur-sm hover:bg-white/[0.05] transition-all duration-200`}>
+          <div key={kpi.label} style={{ '--glow': kpi.glow } as React.CSSProperties} className={`stat-card bg-white/[0.03] border ${kpi.border} rounded-2xl p-5 backdrop-blur-sm hover:bg-white/[0.05]`}>
             <div className="flex items-center justify-between mb-4">
               <div className={`w-10 h-10 ${kpi.bg} rounded-xl flex items-center justify-center`}>
                 <kpi.icon size={18} className={kpi.color} />
               </div>
               <ArrowUpRight size={14} className="text-slate-600" />
             </div>
-            <p className="text-3xl font-bold text-white">{kpi.value}</p>
-            <p className="text-slate-500 text-xs mt-1">{kpi.label}</p>
-            <p className="text-slate-600 text-xs mt-0.5">{kpi.sub}</p>
+            <p className="text-3xl font-semibold tracking-tight text-white tabular-nums">{kpi.value}</p>
+            <p className="text-slate-300 text-xs mt-1">{kpi.label}</p>
+            <p className="text-slate-500 text-xs mt-0.5">{kpi.sub}</p>
           </div>
         ))}
       </div>
@@ -119,7 +117,7 @@ export function DashboardPage() {
             <h3 className="text-white font-semibold text-sm">Rendimiento del staff</h3>
           </div>
           {!stats?.staffStats?.length ? (
-            <div className="flex items-center justify-center h-32 text-slate-600 text-sm">Sin datos todavía</div>
+            <div className="flex items-center justify-center h-32 text-slate-500 text-sm">Sin datos todavía</div>
           ) : (
             <div className="space-y-3">
               {stats.staffStats.map(s => (
@@ -150,7 +148,7 @@ export function DashboardPage() {
             <h3 className="text-white font-semibold text-sm">Servicios más populares</h3>
           </div>
           {!stats?.topServices?.length ? (
-            <div className="flex items-center justify-center h-32 text-slate-600 text-sm">Sin datos todavía</div>
+            <div className="flex items-center justify-center h-32 text-slate-500 text-sm">Sin datos todavía</div>
           ) : (
             <div className="space-y-3">
               {stats.topServices.map((s, i) => (

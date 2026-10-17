@@ -5,6 +5,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { User, Mail, Phone, Shield, Lock, Save, Building2 } from 'lucide-react'
+import { toast } from 'sonner'
+import { roleLabel } from '@/lib/labels'
+import { PageHeader } from '@/components/app/PageHeader'
+import { PageLoader } from '@/components/app/PageLoader'
 
 export function ProfilePage() {
   const queryClient = useQueryClient()
@@ -27,6 +31,7 @@ export function ProfilePage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['profile'] })
       setSuccess('Perfil actualizado correctamente.')
+      toast.success('Perfil actualizado')
       setTimeout(() => setSuccess(''), 3000)
     },
     onError: () => setError('Error al actualizar el perfil.')
@@ -36,6 +41,7 @@ export function ProfilePage() {
     mutationFn: profileApi.changePassword,
     onSuccess: () => {
       setSuccess('Contraseña cambiada correctamente.')
+      toast.success('Contraseña cambiada')
       setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' })
       setTimeout(() => setSuccess(''), 3000)
     },
@@ -68,25 +74,15 @@ export function ProfilePage() {
     })
   }
 
-  if (isLoading) return (
-    <div className="flex items-center justify-center h-64">
-      <div className="flex items-center gap-3 text-slate-400">
-        <span className="w-5 h-5 border-2 border-slate-600 border-t-violet-500 rounded-full animate-spin" />
-        Cargando perfil...
-      </div>
-    </div>
-  )
+  if (isLoading) return <PageLoader label="Cargando perfil…" cards={0} />
 
   return (
     <div className="max-w-3xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Mi perfil</h1>
-        <p className="text-slate-400 mt-1 text-sm">Gestiona tu información personal</p>
-      </div>
+      <PageHeader title="Mi perfil" subtitle="Gestiona tu información personal" />
 
       {/* Profile card */}
       <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-6 backdrop-blur-sm">
-        <div className="flex items-center gap-5">
+        <div className="flex flex-wrap items-center gap-5">
           <div className="w-16 h-16 bg-gradient-to-br from-violet-500 to-indigo-500 rounded-2xl flex items-center justify-center shadow-lg shadow-violet-600/20 flex-shrink-0">
             <span className="text-white text-2xl font-bold">
               {profile?.fullName?.charAt(0).toUpperCase()}
@@ -97,7 +93,7 @@ export function ProfilePage() {
             <p className="text-slate-400 text-sm">{profile?.email}</p>
             <div className="flex items-center gap-2 mt-2">
               <span className="text-xs bg-violet-500/20 text-violet-400 border border-violet-500/20 px-2 py-0.5 rounded-md font-medium">
-                {profile?.role}
+                {roleLabel(profile?.role)}
               </span>
               <span className="text-xs bg-white/5 text-slate-400 border border-white/10 px-2 py-0.5 rounded-md flex items-center gap-1">
                 <Building2 size={10} />
@@ -105,7 +101,7 @@ export function ProfilePage() {
               </span>
             </div>
           </div>
-          <div className="text-right">
+          <div className="sm:text-right">
             <p className="text-slate-500 text-xs">Miembro desde</p>
             <p className="text-white text-sm font-medium mt-0.5">
               {new Date(profile?.createdAt ?? '').toLocaleDateString('es-ES', {
@@ -138,11 +134,8 @@ export function ProfilePage() {
       </div>
 
       {/* Feedback */}
-      {success && (
-        <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3">
-          <p className="text-emerald-400 text-sm">{success}</p>
-        </div>
-      )}
+      {/* El éxito se avisa con una notificación emergente; los errores se quedan aquí */}
+      <span className="sr-only" role="status">{success}</span>
       {error && (
         <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-3">
           <p className="text-rose-400 text-sm">{error}</p>
@@ -157,7 +150,7 @@ export function ProfilePage() {
             Información personal
           </h3>
           <form onSubmit={handleUpdateProfile} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-slate-300 text-sm flex items-center gap-2">
                   <User size={13} className="text-slate-500" /> Nombre completo
@@ -196,7 +189,7 @@ export function ProfilePage() {
                 <Shield size={13} className="text-slate-500" /> Rol
               </Label>
               <Input
-                value={profile?.role}
+                value={roleLabel(profile?.role)}
                 disabled
                 className="bg-white/[0.02] border-white/5 text-slate-500 h-10 rounded-xl cursor-not-allowed"
               />

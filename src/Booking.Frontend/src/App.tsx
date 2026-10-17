@@ -12,6 +12,10 @@ import { StatsPage } from '@/pages/admin/StatsPage'
 import { ServicesPage } from '@/pages/admin/ServicesPage'
 import { CalendarPage } from '@/pages/admin/CalendarPage'
 import { PublicBookingPage } from '@/pages/public/PublicBookingPage'
+import { LandingPage } from '@/pages/public/LandingPage'
+import { AgendaPage } from '@/pages/admin/AgendaPage'
+import { SharePage } from '@/pages/admin/SharePage'
+import { NotFoundPage } from '@/pages/NotFoundPage'
 
 
 export default function App() {
@@ -56,7 +60,7 @@ export default function App() {
         </ProtectedRoute>
       } />
       <Route path="/" element={
-        <Navigate to={isAuthenticated ? '/dashboard' : '/login'} replace />
+        isAuthenticated ? <Navigate to="/dashboard" replace /> : <LandingPage />
       } />
 
 
@@ -66,7 +70,19 @@ export default function App() {
         </ProtectedRoute>
       } />
 
+      <Route path="/agenda" element={
+        <ProtectedRoute allowedRoles={['Owner', 'Staff', 'SuperAdmin']}>
+          <MainLayout><AgendaPage /></MainLayout>
+        </ProtectedRoute>
+      } />
+      <Route path="/share" element={
+        <ProtectedRoute allowedRoles={['Owner', 'SuperAdmin']}>
+          <MainLayout><SharePage /></MainLayout>
+        </ProtectedRoute>
+      } />
+
       <Route path="/book/:subdomain" element={<PublicBookingPage />} />
+      <Route path="*" element={<NotFoundPage />} />
     </Routes>
   )
 }

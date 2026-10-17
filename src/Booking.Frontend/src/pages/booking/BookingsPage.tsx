@@ -7,7 +7,18 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Calendar, Clock, User, Scissors, XCircle, Plus, CheckCircle } from 'lucide-react'
-import type { TimeSlot } from '@/types'
+import { toast } from 'sonner'
+import { isAxiosError } from 'axios'
+import { PageHeader } from '@/components/app/PageHeader'
+import { PageLoader } from '@/components/app/PageLoader'
+import { EmptyState } from '@/components/app/EmptyState'
+import { StatusBadge } from '@/components/app/StatusBadge'
+import { ConfirmDialog } from '@/components/app/ConfirmDialog'
+import { formatPrice, toLocalIsoDate } from '@/lib/labels'
+import type { Booking, TimeSlot } from '@/types'
+
+const apiMessage = (err: unknown, fallback: string) =>
+  (isAxiosError<{ message?: string }>(err) && err.response?.data?.message) || fallback
 
 export function BookingsPage() {
   const queryClient = useQueryClient()
@@ -18,6 +29,7 @@ export function BookingsPage() {
   const [selectedDate, setSelectedDate] = useState('')
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null)
   const [notes, setNotes] = useState('')
+  const [cancelTarget, setCancelTarget] = useState<Booking | null>(null)
 
   const { data: myBookings, isLoading } = useQuery({
     queryKey: ['my-bookings'],
@@ -71,71 +83,60 @@ export function BookingsPage() {
         setSelectedDate('')
         setSelectedSlot(null)
         setNotes('')
-      }
+        toast.success('Reserva creada')
+      },
+      onError: (err) => toast.error(apiMessage(err, 'No se pudo crear la reserva. Inténtalo de nuevo.')),
     })
   const cancelMutation = useMutation({
       mutationFn: (id: string) => bookingsApi.cancel(id),
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ['my-bookings'] })
         queryClient.invalidateQueries({ queryKey: ['availability'] })
+        setCancelTarget(null)
+        toast.success('Reserva cancelada')
       },
-      onError: (error: unknown) => {
-        console.error('Error cancelando:', error)
-      }
+      onError: (err) => toast.error(apiMessage(err, 'No se pudo cancelar la reserva.')),
   })
-  const statusColor: Record<string, string> = {
-    Pending:   'bg-amber-500/10 text-amber-400 border-amber-500/20',
-    Confirmed: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-    Cancelled: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
-    Completed: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-  }
 
-  if (isLoading) return (
-    <div className="flex items-center justify-center h-64">
-      <div className="flex items-center gap-3 text-slate-400">
-        <span className="w-5 h-5 border-2 border-slate-600 border-t-violet-500 rounded-full animate-spin" />
-        Cargando reservas...
-      </div>
-    </div>
-  )
+  if (isLoading) return <PageLoader label="Cargando reservas…" cards={0} />
 
   return (
     <div className="space-y-6 max-w-5xl">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Mis reservas</h1>
-          <p className="text-slate-400 mt-1 text-sm">{myBookings?.length ?? 0} reservas en total</p>
-        </div>
-        <Button
-          onClick={() => setShowBookingModal(true)}
-          className="bg-violet-600 hover:bg-violet-500 text-white rounded-xl px-4 h-10 flex items-center gap-2 shadow-lg shadow-violet-600/20"
-        >
-          <Plus size={16} /> Nueva reserva
-        </Button>
-      </div>
+      <PageHeader
+        title="Mis reservas"
+        subtitle={`${myBookings?.length ?? 0} reservas en total`}
+        actions={
+          <Button
+            onClick={() => setShowBookingModal(true)}
+            className="bg-violet-600 hover:bg-violet-500 text-white rounded-xl px-4 h-10 flex items-center gap-2 shadow-lg shadow-violet-600/20"
+          >
+            <Plus size={16} /> Nueva reserva
+          </Button>
+        }
+      />
 
       {/* Bookings list */}
       <div className="space-y-3">
         {myBookings?.map(b => (
           <div key={b.id} className="bg-white/[0.03] border border-white/10 rounded-2xl p-5 backdrop-blur-sm hover:border-white/15 transition-all">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-4 min-w-0">
                 <div className="w-12 h-12 bg-gradient-to-br from-violet-500/20 to-indigo-500/20 rounded-xl flex items-center justify-center border border-violet-500/20 flex-shrink-0">
                   <Scissors size={18} className="text-violet-400" />
                 </div>
                 <div>
                   <p className="text-white font-semibold">{b.serviceName}</p>
-                  <div className="flex items-center gap-3 mt-1">
-                    <span className="flex items-center gap-1 text-slate-500 text-xs">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
+                    <span className="flex items-center gap-1 text-slate-400 text-xs">
                       <User size={11} /> {b.staffName}
                     </span>
-                    <span className="flex items-center gap-1 text-slate-500 text-xs">
+                    <span className="flex items-center gap-1 text-slate-400 text-xs">
                       <Calendar size={11} />
                       {new Date(b.startTime).toLocaleDateString('es-ES', {
                         day: 'numeric', month: 'long', year: 'numeric'
                       })}
                     </span>
-                    <span className="flex items-center gap-1 text-slate-500 text-xs">
+                    <span className="flex items-center gap-1 text-slate-400 text-xs">
                       <Clock size={11} />
                       {new Date(b.startTime).toLocaleTimeString('es-ES', {
                         hour: '2-digit', minute: '2-digit'
@@ -144,44 +145,64 @@ export function BookingsPage() {
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <div className="text-right">
-                  <p className="text-white font-bold">{b.price.toFixed(2)}€</p>
-                  <span className={`text-[10px] border px-2 py-0.5 rounded-md font-medium ${statusColor[b.status] ?? 'bg-slate-500/10 text-slate-400'}`}>
-                    {b.status}
-                  </span>
+              <div className="flex items-center justify-between gap-3 sm:justify-end">
+                <div className="flex items-center gap-3 sm:flex-col sm:items-end sm:gap-1">
+                  <p className="text-white font-semibold">{formatPrice(b.price)}</p>
+                  <StatusBadge status={b.status} />
                 </div>
                 {b.status === 'Pending' || b.status === 'Confirmed' ? (
                   <button
-                    onClick={() => cancelMutation.mutate(b.id)}
-                    className="w-8 h-8 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 flex items-center justify-center transition-colors"
+                    onClick={() => setCancelTarget(b)}
+                    aria-label={`Cancelar reserva de ${b.serviceName}`}
+                    title="Cancelar reserva"
+                    className="w-9 h-9 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 flex items-center justify-center transition-colors"
                   >
-                    <XCircle size={14} className="text-rose-400" />
+                    <XCircle size={15} className="text-rose-300" />
                   </button>
                 ) : null}
               </div>
             </div>
             {b.notes && (
-              <p className="text-slate-500 text-xs mt-3 pt-3 border-t border-white/[0.05]">
+              <p className="text-slate-400 text-xs mt-3 pt-3 border-t border-white/[0.05]">
                 📝 {b.notes}
               </p>
             )}
           </div>
         ))}
         {!myBookings?.length && (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="w-16 h-16 bg-white/[0.03] border border-white/10 rounded-2xl flex items-center justify-center mb-4">
-              <Calendar size={24} className="text-slate-600" />
-            </div>
-            <p className="text-white font-medium">Sin reservas todavía</p>
-            <p className="text-slate-500 text-sm mt-1">Crea tu primera reserva pulsando el botón</p>
+          <div className="bg-white/[0.02] border border-white/[0.06] rounded-2xl">
+            <EmptyState
+              icon={Calendar}
+              title="Sin reservas todavía"
+              text="Cuando reserves un servicio aparecerá aquí, con su fecha, hora y estado."
+              action={
+                <Button
+                  onClick={() => setShowBookingModal(true)}
+                  className="bg-violet-600 hover:bg-violet-500 text-white rounded-xl px-4 h-10 flex items-center gap-2"
+                >
+                  <Plus size={16} /> Hacer mi primera reserva
+                </Button>
+              }
+            />
           </div>
         )}
       </div>
 
+      <ConfirmDialog
+        open={!!cancelTarget}
+        onOpenChange={open => { if (!open) setCancelTarget(null) }}
+        title="¿Cancelar esta reserva?"
+        description={cancelTarget
+          ? `${cancelTarget.serviceName} con ${cancelTarget.staffName}, el ${new Date(cancelTarget.startTime).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}. Esta acción no se puede deshacer.`
+          : ''}
+        confirmLabel="Sí, cancelar"
+        loading={cancelMutation.isPending}
+        onConfirm={() => cancelTarget && cancelMutation.mutate(cancelTarget.id)}
+      />
+
       {/* Modal nueva reserva */}
       <Dialog open={showBookingModal} onOpenChange={setShowBookingModal}>
-        <DialogContent className="bg-[#0d0d14] border border-white/10 text-white rounded-2xl max-w-lg">
+        <DialogContent className="app-dialog max-w-lg">
           <DialogHeader>
             <DialogTitle className="text-white">Nueva reserva</DialogTitle>
           </DialogHeader>
@@ -270,7 +291,7 @@ export function BookingsPage() {
                 <Input
                   type="date"
                   value={selectedDate}
-                  min={new Date().toISOString().split('T')[0]}
+                  min={toLocalIsoDate(new Date())}
                   onChange={e => setSelectedDate(e.target.value)}
                   className="bg-white/5 border-white/10 text-white h-10 rounded-xl"
                 />
@@ -344,7 +365,7 @@ export function BookingsPage() {
                 {[
                   { label: 'Servicio', value: services?.find(s => s.id === selectedServiceId)?.name },
                   { label: 'Staff', value: staff?.find(s => s.id === selectedStaffId)?.name },
-                  { label: 'Fecha', value: new Date(selectedDate).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }) },
+                  { label: 'Fecha', value: new Date(`${selectedDate}T00:00`).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }) },
                   { label: 'Hora', value: new Date(selectedSlot!.startTime).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) },
                   { label: 'Precio', value: `${services?.find(s => s.id === selectedServiceId)?.price.toFixed(2)}€` },
                 ].map(item => (

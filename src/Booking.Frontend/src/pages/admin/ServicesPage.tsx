@@ -8,6 +8,11 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Plus, Pencil, Trash2, Clock, DollarSign, ToggleLeft, ToggleRight, Scissors } from 'lucide-react'
 import type { Service } from '@/types'
+import { toast } from 'sonner'
+import { PageHeader } from '@/components/app/PageHeader'
+import { PageLoader } from '@/components/app/PageLoader'
+
+const onError = () => toast.error('No se pudo guardar. Revisa los datos e inténtalo de nuevo.')
 
 export function ServicesPage() {
   const queryClient = useQueryClient()
@@ -48,7 +53,9 @@ export function ServicesPage() {
       queryClient.invalidateQueries({ queryKey: ['businesses'] })
       setShowCreateModal(false)
       setForm({ name: '', description: '', durationMinutes: 30, price: 0, isActive: true })
-    }
+      toast.success('Servicio creado')
+    },
+    onError,
   })
 
   const updateMutation = useMutation({
@@ -63,7 +70,9 @@ export function ServicesPage() {
       queryClient.invalidateQueries({ queryKey: ['services', activeBusiness?.id] })
       setShowEditModal(false)
       setSelectedService(null)
-    }
+      toast.success('Cambios guardados')
+    },
+    onError,
   })
 
   const deleteMutation = useMutation({
@@ -73,7 +82,9 @@ export function ServicesPage() {
       queryClient.invalidateQueries({ queryKey: ['businesses'] })
       setShowDeleteModal(false)
       setSelectedService(null)
-    }
+      toast.success('Servicio eliminado')
+    },
+    onError: () => toast.error('No se pudo eliminar el servicio.'),
   })
 
   const toggleMutation = useMutation({
@@ -84,7 +95,8 @@ export function ServicesPage() {
       price: service.price,
       isActive: !service.isActive,
     }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['services', activeBusiness?.id] })
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['services', activeBusiness?.id] }),
+    onError,
   })
 
   const openEdit = (s: Service) => {
@@ -104,14 +116,7 @@ export function ServicesPage() {
     setShowDeleteModal(true)
   }
 
-  if (bizLoading) return (
-    <div className="flex items-center justify-center h-64">
-      <div className="flex items-center gap-3 text-slate-400">
-        <span className="w-5 h-5 border-2 border-slate-600 border-t-violet-500 rounded-full animate-spin" />
-        Cargando...
-      </div>
-    </div>
-  )
+  if (bizLoading) return <PageLoader label="Cargando servicios…" cards={2} />
 
   const activeServices = services?.filter(s => s.isActive) ?? []
   const inactiveServices = services?.filter(s => !s.isActive) ?? []
@@ -120,19 +125,19 @@ export function ServicesPage() {
     <div className="space-y-6 max-w-5xl">
 
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Servicios</h1>
-          <p className="text-slate-400 mt-1 text-sm">Gestiona los servicios de tus negocios</p>
-        </div>
-        <Button
-          onClick={() => setShowCreateModal(true)}
-          disabled={!activeBusiness}
-          className="bg-violet-600 hover:bg-violet-500 text-white rounded-xl px-4 h-10 flex items-center gap-2 shadow-lg shadow-violet-600/20"
-        >
-          <Plus size={16} /> Nuevo servicio
-        </Button>
-      </div>
+      <PageHeader
+        title="Servicios"
+        subtitle="Gestiona los servicios de tus negocios"
+        actions={
+          <Button
+            onClick={() => setShowCreateModal(true)}
+            disabled={!activeBusiness}
+            className="bg-violet-600 hover:bg-violet-500 text-white rounded-xl px-4 h-10 flex items-center gap-2 shadow-lg shadow-violet-600/20"
+          >
+            <Plus size={16} /> Nuevo servicio
+          </Button>
+        }
+      />
 
       {/* Selector de negocio */}
       {businesses && businesses.length > 1 && (
@@ -241,7 +246,7 @@ export function ServicesPage() {
 
       {/* Modal crear */}
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-        <DialogContent className="bg-[#0d0d14] border border-white/10 text-white rounded-2xl max-w-md">
+        <DialogContent className="app-dialog max-w-md">
           <DialogHeader>
             <DialogTitle className="text-white">Nuevo servicio</DialogTitle>
           </DialogHeader>
@@ -287,7 +292,7 @@ export function ServicesPage() {
 
       {/* Modal editar */}
       <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-        <DialogContent className="bg-[#0d0d14] border border-white/10 text-white rounded-2xl max-w-md">
+        <DialogContent className="app-dialog max-w-md">
           <DialogHeader>
             <DialogTitle className="text-white">Editar servicio</DialogTitle>
           </DialogHeader>
@@ -348,7 +353,7 @@ export function ServicesPage() {
 
       {/* Modal eliminar */}
       <Dialog open={showDeleteModal} onOpenChange={setShowDeleteModal}>
-        <DialogContent className="bg-[#0d0d14] border border-white/10 text-white rounded-2xl max-w-sm">
+        <DialogContent className="app-dialog max-w-sm">
           <DialogHeader>
             <DialogTitle className="text-white">Eliminar servicio</DialogTitle>
           </DialogHeader>

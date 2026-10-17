@@ -77,11 +77,8 @@ export function PublicBookingPage() {
   // Confirmación
   if (confirmed) return (
     <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center p-4">
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -left-40 w-96 h-96 bg-violet-600/10 rounded-full blur-3xl" />
-        <div className="absolute -bottom-40 right-0 w-96 h-96 bg-emerald-600/10 rounded-full blur-3xl" />
-      </div>
-      <div className="w-full max-w-md bg-white/[0.03] border border-white/10 rounded-2xl p-8 text-center relative z-10">
+      <div className="app-backdrop fixed inset-0 pointer-events-none" aria-hidden />
+      <div className="page-enter login-card w-full max-w-md rounded-2xl p-8 text-center relative z-10">
         <div className="w-16 h-16 bg-emerald-500/20 border border-emerald-500/30 rounded-2xl flex items-center justify-center mx-auto mb-6">
           <CheckCircle size={28} className="text-emerald-400" />
         </div>
@@ -111,17 +108,10 @@ export function PublicBookingPage() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0f]">
-      {/* Fondo animado */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute -top-40 -left-40 w-96 h-96 bg-violet-600/10 rounded-full blur-3xl animate-pulse" />
-        <div className="absolute bottom-0 right-0 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl animate-pulse delay-1000" />
-        <div className="absolute inset-0" style={{
-          backgroundImage: `radial-gradient(circle at 1px 1px, rgba(255,255,255,0.02) 1px, transparent 0)`,
-          backgroundSize: '40px 40px'
-        }} />
-      </div>
+      {/* Fondo estático */}
+      <div className="app-backdrop fixed inset-0 pointer-events-none" aria-hidden />
 
-      <div className="relative z-10 max-w-2xl mx-auto px-4 py-12">
+      <div className="page-enter relative z-10 max-w-2xl mx-auto px-4 py-12">
 
         {/* Header del negocio */}
         {business && config && (
@@ -131,7 +121,7 @@ export function PublicBookingPage() {
             </div>
             <h1 className="text-3xl font-bold text-white">{business.name}</h1>
             <p className={`text-sm font-medium mt-1 ${config.color}`}>{config.label}</p>
-            <div className="flex items-center justify-center gap-4 mt-3 text-slate-500 text-xs">
+            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 mt-3 text-slate-400 text-xs">
               {business.address && (
                 <span className="flex items-center gap-1">
                   <MapPin size={11} /> {business.address}
@@ -173,7 +163,7 @@ export function PublicBookingPage() {
         )}
 
         {/* Steps indicator */}
-        <div className="flex items-center gap-2 mb-8 justify-center">
+        <div className="flex items-center gap-1.5 sm:gap-2 mb-8 justify-center" aria-label={`Paso ${step} de 4`}>
           {[
             { n: 1, label: 'Servicio' },
             { n: 2, label: 'Fecha y hora' },
@@ -189,9 +179,9 @@ export function PublicBookingPage() {
                     : 'bg-white/[0.03] text-slate-500'
               }`}>
                 {step > s.n ? <CheckCircle size={12} /> : <span>{s.n}</span>}
-                {s.label}
+                <span className={step === s.n ? '' : 'hidden sm:inline'}>{s.label}</span>
               </div>
-              {i < 3 && <div className={`w-8 h-px ${step > s.n ? 'bg-violet-500' : 'bg-white/10'}`} />}
+              {i < 3 && <div className={`w-4 sm:w-8 h-px ${step > s.n ? 'bg-violet-500' : 'bg-white/10'}`} />}
             </div>
           ))}
         </div>

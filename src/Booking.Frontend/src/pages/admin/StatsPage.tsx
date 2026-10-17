@@ -11,8 +11,11 @@ import {
   TrendingUp, DollarSign, Calendar, XCircle,
   Users, Star, BarChart3, Building2, FileSpreadsheet, FileText
 } from 'lucide-react'
+import { toast } from 'sonner'
+import { toLocalIsoDate } from '@/lib/labels'
+import { PageHeader } from '@/components/app/PageHeader'
 
-const COLORS = ['#7C3AED', '#3B82F6', '#10B981', '#F59E0B', '#EF4444']
+const COLORS = ['#7C3AED', '#EF4444', '#10B981', '#F59E0B', '#3B82F6']
 
 export function StatsPage() {
   const [selectedBusinessId, setSelectedBusinessId] = useState<string | undefined>()
@@ -36,8 +39,8 @@ export function StatsPage() {
     else if (period === 'month') from.setMonth(from.getMonth() - 1)
     else from.setMonth(from.getMonth() - 3)
     return {
-      from: from.toISOString().split('T')[0],
-      to: to.toISOString().split('T')[0]
+      from: toLocalIsoDate(from),
+      to: toLocalIsoDate(to)
     }
   }
 
@@ -45,8 +48,9 @@ export function StatsPage() {
 
   const { data: periodData, isLoading: periodLoading } = useQuery({
     queryKey: ['bookings-period', period, selectedBusinessId],
+    // El backend aún no filtra por negocio: esta gráfica muestra siempre todos
     queryFn: () => adminApi.getBookingsByPeriod(from, to),
-      refetchInterval: 30000,
+    refetchInterval: 30000,
   })
 
   const { data: staffStats } = useQuery({
@@ -57,17 +61,21 @@ export function StatsPage() {
 
   // Mutations de exportación
   const excelMutation = useMutation({
-    mutationFn: () => adminApi.exportExcel(from, to)
+    mutationFn: () => adminApi.exportExcel(from, to),
+    onSuccess: () => toast.success('Excel descargado'),
+    onError: () => toast.error('No se pudo exportar a Excel.'),
   })
 
   const pdfMutation = useMutation({
-    mutationFn: () => adminApi.exportPdf(from, to)
+    mutationFn: () => adminApi.exportPdf(from, to),
+    onSuccess: () => toast.success('PDF descargado'),
+    onError: () => toast.error('No se pudo exportar a PDF.'),
   })
 
+  // El backend solo da el total y las canceladas: se muestran activas frente a canceladas
   const bookingStatusData = stats ? [
-    { name: 'Completadas', value: stats.totalBookings - stats.cancelledBookings - stats.bookingsToday },
+    { name: 'Activas', value: stats.totalBookings - stats.cancelledBookings },
     { name: 'Canceladas', value: stats.cancelledBookings },
-    { name: 'Pendientes', value: stats.bookingsToday },
   ].filter(d => d.value > 0) : []
 
   const servicesChartData = stats?.topServices?.map(s => ({
@@ -87,11 +95,8 @@ export function StatsPage() {
     <div className="space-y-6 max-w-7xl">
 
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Estadísticas</h1>
-          <p className="text-slate-400 mt-1 text-sm">Análisis detallado de tu negocio</p>
-        </div>
+      <div className="flex items-end justify-between flex-wrap gap-4">
+        <PageHeader title="Estadísticas" subtitle="Análisis detallado de tu negocio" />
 
         <div className="flex items-center gap-3 flex-wrap">
           {/* Selector de negocio */}
@@ -176,7 +181,7 @@ export function StatsPage() {
           { label: 'Este mes',         value: stats?.bookingsThisMonth ?? 0,                     icon: TrendingUp, color: 'text-blue-400',    bg: 'bg-blue-500/10',    border: 'border-blue-500/20' },
           { label: 'Cancelaciones',    value: `${stats?.cancellationRate ?? 0}%`,                icon: XCircle,    color: 'text-rose-400',    bg: 'bg-rose-500/10',    border: 'border-rose-500/20' },
         ].map(kpi => (
-          <div key={kpi.label} className={`bg-white/[0.03] border ${kpi.border} rounded-2xl p-5`}>
+          <div key={kpi.label} className={`stat-card bg-white/[0.03] border ${kpi.border} rounded-2xl p-5`}>
             <div className={`w-9 h-9 ${kpi.bg} rounded-xl flex items-center justify-center mb-3`}>
               <kpi.icon size={16} className={kpi.color} />
             </div>
@@ -191,6 +196,7 @@ export function StatsPage() {
         <div className="flex items-center gap-2 mb-6">
           <BarChart3 size={16} className="text-violet-400" />
           <h3 className="text-white font-semibold text-sm">Reservas por día</h3>
+          {selectedBusinessId && <span className="text-slate-500 text-xs">· todos los negocios</span>}
         </div>
         {periodLoading ? (
           <div className="flex items-center justify-center h-48 text-slate-500 text-sm">Cargando datos...</div>
@@ -210,7 +216,7 @@ export function StatsPage() {
             </BarChart>
           </ResponsiveContainer>
         ) : (
-          <div className="flex items-center justify-center h-48 text-slate-600 text-sm">Sin datos para este periodo</div>
+          <div className="flex items-center justify-center h-48 text-slate-500 text-sm">Sin datos para este periodo</div>
         )}
       </div>
 
@@ -238,7 +244,7 @@ export function StatsPage() {
               </LineChart>
             </ResponsiveContainer>
           ) : (
-            <div className="flex items-center justify-center h-48 text-slate-600 text-sm">Sin datos</div>
+            <div className="flex items-center justify-center h-48 text-slate-500 text-sm">Sin datos</div>
           )}
         </div>
 
@@ -249,8 +255,8 @@ export function StatsPage() {
             <h3 className="text-white font-semibold text-sm">Estado de reservas</h3>
           </div>
           {bookingStatusData.length > 0 ? (
-            <div className="flex items-center gap-4">
-              <ResponsiveContainer width="60%" height={180}>
+            <div className="flex flex-col items-center gap-4 sm:flex-row">
+              <ResponsiveContainer width="100%" height={180} className="sm:!w-3/5">
                 <PieChart>
                   <Pie data={bookingStatusData} cx="50%" cy="50%" innerRadius={50} outerRadius={75} paddingAngle={3} dataKey="value">
                     {bookingStatusData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
@@ -271,7 +277,7 @@ export function StatsPage() {
               </div>
             </div>
           ) : (
-            <div className="flex items-center justify-center h-48 text-slate-600 text-sm">Sin datos</div>
+            <div className="flex items-center justify-center h-48 text-slate-500 text-sm">Sin datos</div>
           )}
         </div>
       </div>
@@ -295,7 +301,7 @@ export function StatsPage() {
             </BarChart>
           </ResponsiveContainer>
         ) : (
-          <div className="flex items-center justify-center h-32 text-slate-600 text-sm">Sin datos de servicios</div>
+          <div className="flex items-center justify-center h-32 text-slate-500 text-sm">Sin datos de servicios</div>
         )}
       </div>
 
@@ -318,7 +324,7 @@ export function StatsPage() {
             </BarChart>
           </ResponsiveContainer>
         ) : (
-          <div className="flex items-center justify-center h-32 text-slate-600 text-sm">Sin datos de staff</div>
+          <div className="flex items-center justify-center h-32 text-slate-500 text-sm">Sin datos de staff</div>
         )}
       </div>
 

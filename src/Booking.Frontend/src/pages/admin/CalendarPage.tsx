@@ -11,13 +11,12 @@ import { ChevronLeft, ChevronRight, Calendar, Scissors } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import type { DatesSetArg, EventClickArg } from '@fullcalendar/core'
 import type { Booking } from '@/types'
+import { BOOKING_STATUS, bookingStatus, paymentStatus, toLocalIsoDate } from '@/lib/labels'
+import { PageHeader } from '@/components/app/PageHeader'
 
-const STATUS_COLORS: Record<string, string> = {
-  Pending:   '#7C3AED',
-  Confirmed: '#10B981',
-  Cancelled: '#EF4444',
-  Completed: '#3B82F6',
-}
+const STATUS_COLORS: Record<string, string> = Object.fromEntries(
+  Object.entries(BOOKING_STATUS).map(([status, s]) => [status, s.color])
+)
 
 export function CalendarPage() {
   const calendarRef = useRef<FullCalendar>(null)
@@ -60,7 +59,7 @@ export function CalendarPage() {
       const toIsoDate = (offsetDays: number) => {
         const d = new Date()
         d.setDate(d.getDate() + offsetDays)
-        return d.toISOString().split('T')[0]
+        return toLocalIsoDate(d)
       }
       return bookingsApi.getByBusiness(activeBusiness!.id, toIsoDate(-30), toIsoDate(60))
     },
@@ -99,11 +98,8 @@ export function CalendarPage() {
     <div className="space-y-4 max-w-7xl">
 
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Calendario</h1>
-          <p className="text-slate-400 mt-1 text-sm">Vista de todas las reservas</p>
-        </div>
+      <div className="flex items-end justify-between flex-wrap gap-3">
+        <PageHeader title="Calendario" subtitle="Vista de todas las reservas" />
 
         {businesses && businesses.length > 1 && (
           <div className="flex items-center gap-2">
@@ -134,6 +130,7 @@ export function CalendarPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => navigate('prev')}
+            aria-label="Anterior"
             className="w-8 h-8 rounded-xl bg-white/[0.03] border border-white/10 flex items-center justify-center hover:bg-white/[0.07] transition-all"
           >
             <ChevronLeft size={16} className="text-slate-400" />
@@ -146,6 +143,7 @@ export function CalendarPage() {
           </button>
           <button
             onClick={() => navigate('next')}
+            aria-label="Siguiente"
             className="w-8 h-8 rounded-xl bg-white/[0.03] border border-white/10 flex items-center justify-center hover:bg-white/[0.07] transition-all"
           >
             <ChevronRight size={16} className="text-slate-400" />
@@ -203,13 +201,13 @@ export function CalendarPage() {
         {Object.entries(STATUS_COLORS).map(([status, color]) => (
           <div key={status} className="flex items-center gap-1.5">
             <div className="w-2.5 h-2.5 rounded-full" style={{ background: color }} />
-            <span className="text-slate-500 text-xs">{status}</span>
+            <span className="text-slate-400 text-xs">{bookingStatus(status).label}</span>
           </div>
         ))}
       </div>
 
       {/* Calendario */}
-      <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-4 backdrop-blur-sm calendar-dark">
+      <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-2 sm:p-4 backdrop-blur-sm calendar-dark overflow-x-auto">
         <style>{`
           .calendar-dark .fc {
             --fc-border-color: rgba(255,255,255,0.06);
@@ -276,7 +274,7 @@ export function CalendarPage() {
         {selectedBooking && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSelectedBooking(null)} />
-            <div className="relative bg-[#0d0d14] border border-white/10 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+            <div className="app-dialog relative w-full max-w-sm" role="dialog" aria-modal="true" aria-label="Detalle de la reserva">
               <div className="flex items-center justify-between mb-5">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-violet-500/20 border border-violet-500/20 rounded-xl flex items-center justify-center">
@@ -289,6 +287,7 @@ export function CalendarPage() {
                 </div>
                 <button
                   onClick={() => setSelectedBooking(null)}
+                  aria-label="Cerrar"
                   className="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors"
                 >
                   <span className="text-slate-400 text-sm">✕</span>
@@ -301,8 +300,8 @@ export function CalendarPage() {
                   { label: 'Fecha',    value: new Date(selectedBooking.startTime).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }) },
                   { label: 'Hora',     value: `${new Date(selectedBooking.startTime).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })} - ${new Date(selectedBooking.endTime).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}` },
                   { label: 'Precio',   value: `${selectedBooking.price?.toFixed(2)}€` },
-                  { label: 'Estado',   value: selectedBooking.status },
-                  { label: 'Pago',     value: selectedBooking.paymentStatus },
+                  { label: 'Estado',   value: bookingStatus(selectedBooking.status).label },
+                  { label: 'Pago',     value: paymentStatus(selectedBooking.paymentStatus).label },
                 ].map(item => (
                   <div key={item.label} className="flex justify-between items-center p-3 bg-white/[0.02] border border-white/[0.05] rounded-xl">
                     <span className="text-slate-500 text-xs">{item.label}</span>

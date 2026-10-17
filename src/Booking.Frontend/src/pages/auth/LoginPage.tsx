@@ -1,13 +1,29 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { authApi } from '@/api/auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Eye, EyeOff, Calendar, Zap, Shield } from 'lucide-react'
+import { Eye, EyeOff, Calendar, Zap, Shield, ArrowLeft } from 'lucide-react'
+
+// Retraso entre elementos en la animación de entrada
+const STAGGER_MS = 60
+const rise = (i: number) => ({ animationDelay: `${i * STAGGER_MS}ms` })
 
 export function LoginPage() {
+  const cardRef = useRef<HTMLDivElement>(null)
+
+  // Brillo de la tarjeta que sigue al cursor (variables CSS, sin re-renderizar)
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (e.pointerType !== 'mouse') return
+    const el = cardRef.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    el.style.setProperty('--mx', `${e.clientX - r.left}px`)
+    el.style.setProperty('--my', `${e.clientY - r.top}px`)
+  }
+
   const { login } = useAuth()
   const navigate = useNavigate()
   const [error, setError] = useState('')
@@ -31,13 +47,10 @@ export function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] flex overflow-hidden relative">
+    <div className="min-h-screen bg-[#0a0a0f] flex overflow-hidden relative" onPointerMove={handlePointerMove}>
 
-      {/* Animated background */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -left-40 w-96 h-96 bg-violet-600/20 rounded-full blur-3xl animate-pulse" />
-        <div className="absolute top-1/2 -right-40 w-80 h-80 bg-indigo-600/20 rounded-full blur-3xl animate-pulse delay-1000" />
-        <div className="absolute -bottom-40 left-1/3 w-96 h-96 bg-purple-600/15 rounded-full blur-3xl animate-pulse delay-500" />
+      {/* Fondo estático: degradados, retícula, grano y viñeta */}
+      <div className="login-backdrop absolute inset-0 pointer-events-none" aria-hidden>
         <div className="absolute inset-0" style={{
           backgroundImage: `radial-gradient(circle at 1px 1px, rgba(255,255,255,0.03) 1px, transparent 0)`,
           backgroundSize: '40px 40px'
@@ -46,15 +59,15 @@ export function LoginPage() {
 
       {/* Left panel */}
       <div className="hidden lg:flex flex-1 flex-col justify-between p-12 relative z-10">
-        <div className="flex items-center gap-3">
+        <Link to="/" className="login-rise flex items-center gap-3 w-fit rounded-xl focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-violet-400" style={rise(0)}>
           <div className="w-9 h-9 bg-violet-600 rounded-xl flex items-center justify-center">
             <Calendar size={18} className="text-white" />
           </div>
           <span className="text-white font-semibold text-lg tracking-tight">BookingApp</span>
-        </div>
+        </Link>
 
         <div className="space-y-8">
-          <div>
+          <div className="login-rise" style={rise(1)}>
             <h1 className="text-5xl font-bold text-white leading-tight">
               Gestiona tus<br />
               <span className="bg-gradient-to-r from-violet-400 to-indigo-400 bg-clip-text text-transparent">
@@ -72,27 +85,30 @@ export function LoginPage() {
               { icon: Zap, label: 'Reservas en tiempo real', desc: 'Disponibilidad actualizada al instante' },
               { icon: Shield, label: 'Pagos seguros', desc: 'Integración con Stripe certificada' },
               { icon: Calendar, label: 'Panel completo', desc: 'Gestiona staff, servicios y estadísticas' },
-            ].map(item => (
-              <div key={item.label} className="flex items-center gap-4">
+            ].map((item, i) => (
+              <div key={item.label} className="login-rise flex items-center gap-4" style={rise(2 + i)}>
                 <div className="w-10 h-10 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center flex-shrink-0">
                   <item.icon size={16} className="text-violet-400" />
                 </div>
                 <div>
                   <p className="text-white text-sm font-medium">{item.label}</p>
-                  <p className="text-slate-500 text-xs">{item.desc}</p>
+                  <p className="text-slate-400 text-xs">{item.desc}</p>
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        <p className="text-slate-600 text-sm">© 2026 BookingApp. Todos los derechos reservados.</p>
+        <p className="text-slate-500 text-sm">© 2026 BookingApp. Todos los derechos reservados.</p>
       </div>
 
       {/* Right panel - form */}
       <div className="flex-1 flex items-center justify-center p-6 relative z-10">
-        <div className="w-full max-w-md">
-          <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-8 backdrop-blur-xl shadow-2xl">
+        <div className="login-rise w-full max-w-md" style={rise(2)}>
+          <Link to="/" className="mb-6 inline-flex items-center gap-1.5 text-sm text-slate-400 transition-colors hover:text-white">
+            <ArrowLeft size={14} /> Volver al inicio
+          </Link>
+          <div ref={cardRef} className="login-card rounded-2xl p-8">
 
             <div className="mb-8">
               <h2 className="text-2xl font-bold text-white">Bienvenido de nuevo</h2>
@@ -107,7 +123,7 @@ export function LoginPage() {
                   value={form.subdomain}
                   onChange={e => setForm(f => ({ ...f, subdomain: e.target.value }))}
                   required
-                  className="bg-white/5 border-white/10 text-white placeholder:text-slate-600 focus:border-violet-500 focus:ring-violet-500/20 h-11 rounded-xl"
+                  className="bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus:border-violet-500 focus:ring-violet-500/20 h-11 rounded-xl"
                 />
               </div>
 
@@ -119,7 +135,7 @@ export function LoginPage() {
                   value={form.email}
                   onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
                   required
-                  className="bg-white/5 border-white/10 text-white placeholder:text-slate-600 focus:border-violet-500 focus:ring-violet-500/20 h-11 rounded-xl"
+                  className="bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus:border-violet-500 focus:ring-violet-500/20 h-11 rounded-xl"
                 />
               </div>
 
@@ -132,11 +148,12 @@ export function LoginPage() {
                     value={form.password}
                     onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
                     required
-                    className="bg-white/5 border-white/10 text-white placeholder:text-slate-600 focus:border-violet-500 focus:ring-violet-500/20 h-11 rounded-xl pr-10"
+                    className="bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus:border-violet-500 focus:ring-violet-500/20 h-11 rounded-xl pr-10"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
                   >
                     {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -163,7 +180,7 @@ export function LoginPage() {
                 ) : 'Iniciar sesión'}
               </Button>
 
-              <p className="text-center text-sm text-slate-500">
+              <p className="text-center text-sm text-slate-400">
                 ¿No tienes cuenta?{' '}
                 <Link to="/register" className="text-violet-400 font-medium hover:text-violet-300 transition-colors">
                   Regístrate gratis
