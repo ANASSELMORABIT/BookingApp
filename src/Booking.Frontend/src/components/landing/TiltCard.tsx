@@ -1,11 +1,11 @@
 import { useRef, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
-/** Inclinación máxima de la tarjeta con el cursor (grados). */
+/** Inclinación máxima por defecto de la tarjeta con el cursor (grados). */
 const MAX_TILT = 8
 
 /** Tarjeta de vidrio que se inclina hacia el cursor y tiene un brillo que lo sigue. Solo con ratón. */
-export function TiltCard({ children, className }: { children: ReactNode; className?: string }) {
+export function TiltCard({ children, className, maxTilt = MAX_TILT }: { children: ReactNode; className?: string; maxTilt?: number }) {
   const ref = useRef<HTMLDivElement>(null)
 
   const onMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -15,8 +15,8 @@ export function TiltCard({ children, className }: { children: ReactNode; classNa
     const r = el.getBoundingClientRect()
     const x = (e.clientX - r.left) / r.width - 0.5
     const y = (e.clientY - r.top) / r.height - 0.5
-    el.style.setProperty('--ry', `${x * MAX_TILT * 2}deg`)
-    el.style.setProperty('--rx', `${-y * MAX_TILT * 2}deg`)
+    el.style.setProperty('--ry', `${x * maxTilt * 2}deg`)
+    el.style.setProperty('--rx', `${-y * maxTilt * 2}deg`)
     el.style.setProperty('--mx', `${(x + 0.5) * 100}%`)
     el.style.setProperty('--my', `${(y + 0.5) * 100}%`)
   }

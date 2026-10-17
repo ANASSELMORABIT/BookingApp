@@ -1,25 +1,82 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { adminApi } from '@/api/admin'
 import { businessApi } from '@/api/business'
 import { getBusinessConfig } from '@/lib/businessIcons'
 import {
-  LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts'
 import {
-  TrendingUp, DollarSign, Calendar, XCircle,
-  Users, Star, BarChart3, Building2, FileSpreadsheet, FileText
+  TrendingUp, Euro, Calendar, XCircle, Users, Star, Building2, FileSpreadsheet, FileText,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { toLocalIsoDate } from '@/lib/labels'
+import { formatPrice, toLocalIsoDate } from '@/lib/labels'
 import { PageHeader } from '@/components/app/PageHeader'
+import { CountUp } from '@/components/app/CountUp'
+import { Reveal } from '@/components/landing/Reveal'
+import { TiltCard } from '@/components/landing/TiltCard'
+import { BookingsSkyline, type DayStats } from '@/components/stats/BookingsSkyline'
+import { ChartTooltip } from '@/components/stats/ChartTooltip'
 
-const COLORS = ['#7C3AED', '#EF4444', '#10B981', '#F59E0B', '#3B82F6']
+// Paleta validada sobre el fondo oscuro (violeta y rosa también para daltonismo)
+const C = {
+  bookings: '#8b5cf6',
+  revenue: '#0ea371',
+  cancelled: '#f43f5e',
+  grid: 'rgba(255,255,255,0.05)',
+  axis: '#64748b',
+}
+/** Duración de las animaciones de entrada de las gráficas (ms). */
+const CHART_ANIMATION_MS = 900
+const STAGGER_MS = 70
+
+const PERIODS = [
+  { id: 'week', label: '7 días', text: 'últimos 7 días' },
+  { id: 'month', label: '30 días', text: 'últimos 30 días' },
+  { id: '3months', label: '3 meses', text: 'últimos 3 meses' },
+] as const
+type PeriodId = typeof PERIODS[number]['id']
+
+const dayLabel = (key: unknown) =>
+  new Date(`${String(key)}T00:00`).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
+const longDayLabel = (key: unknown) =>
+  new Date(`${String(key)}T00:00`).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })
+const truncate = (s: string, n = 16) => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
+
+function ChartCard({ icon: Icon, iconClass, title, subtitle, children, delay = 0, className }: {
+  icon: React.ComponentType<{ size?: number; className?: string }>
+  iconClass: string
+  title: string
+  subtitle?: string
+  children: React.ReactNode
+  delay?: number
+  className?: string
+}) {
+  return (
+    <Reveal delay={delay} className={className}>
+      <section className="glass-panel h-full p-6" aria-label={title}>
+        <div className="mb-6 flex items-start gap-2">
+          <Icon size={16} className={`mt-0.5 ${iconClass}`} />
+          <div>
+            <h3 className="text-sm font-semibold text-white">{title}</h3>
+            {subtitle && <p className="mt-0.5 text-xs text-slate-400">{subtitle}</p>}
+          </div>
+        </div>
+        {children}
+      </section>
+    </Reveal>
+  )
+}
+
+const Empty = ({ text = 'Sin datos todavía' }: { text?: string }) => (
+  <div className="flex h-48 items-center justify-center text-sm text-slate-500">{text}</div>
+)
 
 export function StatsPage() {
   const [selectedBusinessId, setSelectedBusinessId] = useState<string | undefined>()
-  const [period, setPeriod] = useState<'week' | 'month' | '3months'>('month')
+  const [period, setPeriod] = useState<PeriodId>('month')
+  const [reduceMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+  const animate = !reduceMotion
 
   const { data: businesses } = useQuery({
     queryKey: ['businesses'],
@@ -29,26 +86,21 @@ export function StatsPage() {
   const { data: stats } = useQuery({
     queryKey: ['dashboard', selectedBusinessId],
     queryFn: () => adminApi.getDashboard(selectedBusinessId),
-    refetchInterval: 30000, // Refresca cada 30 segundos
+    refetchInterval: 30000,
   })
 
-  const getPeriodDates = () => {
-    const to = new Date()
-    const from = new Date()
-    if (period === 'week') from.setDate(from.getDate() - 7)
-    else if (period === 'month') from.setMonth(from.getMonth() - 1)
-    else from.setMonth(from.getMonth() - 3)
-    return {
-      from: toLocalIsoDate(from),
-      to: toLocalIsoDate(to)
-    }
-  }
-
-  const { from, to } = getPeriodDates()
+  const { from, to } = useMemo(() => {
+    const end = new Date()
+    const start = new Date()
+    if (period === 'week') start.setDate(start.getDate() - 7)
+    else if (period === 'month') start.setMonth(start.getMonth() - 1)
+    else start.setMonth(start.getMonth() - 3)
+    return { from: toLocalIsoDate(start), to: toLocalIsoDate(end) }
+  }, [period])
 
   const { data: periodData, isLoading: periodLoading } = useQuery({
     queryKey: ['bookings-period', period, selectedBusinessId],
-    // El backend aún no filtra por negocio: esta gráfica muestra siempre todos
+    // El backend aún no filtra por negocio: esta serie muestra siempre todos
     queryFn: () => adminApi.getBookingsByPeriod(from, to),
     refetchInterval: 30000,
   })
@@ -59,7 +111,6 @@ export function StatsPage() {
     enabled: !!(selectedBusinessId || businesses?.[0]?.id),
   })
 
-  // Mutations de exportación
   const excelMutation = useMutation({
     mutationFn: () => adminApi.exportExcel(from, to),
     onSuccess: () => toast.success('Excel descargado'),
@@ -72,42 +123,63 @@ export function StatsPage() {
     onError: () => toast.error('No se pudo exportar a PDF.'),
   })
 
-  // El backend solo da el total y las canceladas: se muestran activas frente a canceladas
-  const bookingStatusData = stats ? [
-    { name: 'Activas', value: stats.totalBookings - stats.cancelledBookings },
-    { name: 'Canceladas', value: stats.cancelledBookings },
-  ].filter(d => d.value > 0) : []
+  // El backend solo devuelve los días con reservas: se rellena el periodo completo con ceros
+  const days: DayStats[] = useMemo(() => {
+    const byDate = new Map((periodData ?? []).map(d => [d.date.slice(0, 10), d]))
+    const out: DayStats[] = []
+    const cursor = new Date(`${from}T00:00`)
+    const last = new Date(`${to}T00:00`)
+    while (cursor <= last) {
+      const key = toLocalIsoDate(cursor)
+      const d = byDate.get(key)
+      out.push({ key, total: d?.totalBookings ?? 0, confirmed: d?.confirmed ?? 0, cancelled: d?.cancelled ?? 0, revenue: d?.revenue ?? 0 })
+      cursor.setDate(cursor.getDate() + 1)
+    }
+    return out
+  }, [periodData, from, to])
 
-  const servicesChartData = stats?.topServices?.map(s => ({
-    name: s.serviceName.length > 12 ? s.serviceName.slice(0, 12) + '...' : s.serviceName,
-    reservas: s.totalBookings,
-    ingresos: s.totalRevenue,
-  })) ?? []
+  const revenueInPeriod = days.reduce((s, d) => s + d.revenue, 0)
+
+  const servicesByBookings = [...(stats?.topServices ?? [])]
+    .sort((a, b) => b.totalBookings - a.totalBookings)
+    .map(s => ({ name: truncate(s.serviceName), full: s.serviceName, reservas: s.totalBookings }))
+  const servicesByRevenue = [...(stats?.topServices ?? [])]
+    .sort((a, b) => b.totalRevenue - a.totalRevenue)
+    .map(s => ({ name: truncate(s.serviceName), full: s.serviceName, ingresos: s.totalRevenue }))
 
   const staffChartData = staffStats?.map(s => ({
     name: s.staffName.split(' ')[0],
     completadas: s.completedBookings,
     canceladas: s.cancelledBookings,
-    ingresos: s.revenue,
   })) ?? []
+
+  const cancellationRate = stats?.cancellationRate ?? 0
+  const periodText = PERIODS.find(p => p.id === period)!.text
+  const anim = { isAnimationActive: animate, animationDuration: CHART_ANIMATION_MS, animationEasing: 'ease-out' as const }
+  const axisTick = { fill: C.axis, fontSize: 11 }
+
+  const kpis = [
+    { label: 'Total reservas', value: stats?.totalBookings ?? 0, kind: 'int' as const, icon: Calendar, color: 'text-violet-300', bg: 'bg-violet-500/10', glow: 'rgb(139 92 246 / 0.3)' },
+    { label: 'Ingresos totales', value: stats?.revenueTotal ?? 0, kind: 'eur' as const, icon: Euro, color: 'text-emerald-300', bg: 'bg-emerald-500/10', glow: 'rgb(14 163 113 / 0.28)' },
+    { label: 'Reservas este mes', value: stats?.bookingsThisMonth ?? 0, kind: 'int' as const, icon: TrendingUp, color: 'text-blue-300', bg: 'bg-blue-500/10', glow: 'rgb(59 130 246 / 0.26)' },
+    { label: 'Tasa de cancelación', value: cancellationRate, kind: 'pct' as const, icon: XCircle, color: 'text-rose-300', bg: 'bg-rose-500/10', glow: 'rgb(244 63 94 / 0.24)' },
+  ]
 
   return (
     <div className="space-y-6 max-w-7xl">
 
-      {/* Header */}
+      {/* Cabecera, filtros y exportación */}
       <div className="flex items-end justify-between flex-wrap gap-4">
         <PageHeader title="Estadísticas" subtitle="Análisis detallado de tu negocio" />
 
         <div className="flex items-center gap-3 flex-wrap">
-          {/* Selector de negocio */}
           {businesses && businesses.length > 0 && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap" role="group" aria-label="Negocio">
               <button
                 onClick={() => setSelectedBusinessId(undefined)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition-all ${
-                  !selectedBusinessId
-                    ? 'bg-violet-600/20 border-violet-500/30 text-violet-300'
-                    : 'bg-white/[0.03] border-white/10 text-slate-400 hover:text-white'
+                aria-pressed={!selectedBusinessId}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition-colors ${
+                  !selectedBusinessId ? 'bg-violet-600/20 border-violet-500/30 text-violet-300' : 'bg-white/[0.03] border-white/10 text-slate-400 hover:text-white'
                 }`}
               >
                 <Building2 size={12} /> Todos
@@ -118,216 +190,189 @@ export function StatsPage() {
                   <button
                     key={b.id}
                     onClick={() => setSelectedBusinessId(b.id)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition-all ${
-                      selectedBusinessId === b.id
-                        ? `${config.bg} ${config.border} ${config.color}`
-                        : 'bg-white/[0.03] border-white/10 text-slate-400 hover:text-white'
+                    aria-pressed={selectedBusinessId === b.id}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition-colors ${
+                      selectedBusinessId === b.id ? `${config.bg} ${config.border} ${config.color}` : 'bg-white/[0.03] border-white/10 text-slate-400 hover:text-white'
                     }`}
                   >
-                    <config.icon size={12} />
-                    {b.name}
+                    <config.icon size={12} /> {b.name}
                   </button>
                 )
               })}
             </div>
           )}
 
-          {/* Selector de periodo */}
-          <div className="flex items-center gap-1 bg-white/[0.03] border border-white/10 rounded-xl p-1">
-            {[
-              { id: 'week', label: '7 días' },
-              { id: 'month', label: '30 días' },
-              { id: '3months', label: '3 meses' },
-            ].map(p => (
+          <div className="flex items-center gap-1 bg-white/[0.03] border border-white/10 rounded-xl p-1" role="group" aria-label="Periodo">
+            {PERIODS.map(p => (
               <button
                 key={p.id}
-                onClick={() => setPeriod(p.id as typeof period)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  period === p.id
-                    ? 'bg-violet-600 text-white'
-                    : 'text-slate-400 hover:text-white'
-                }`}
+                onClick={() => setPeriod(p.id)}
+                aria-pressed={period === p.id}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${period === p.id ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white'}`}
               >
                 {p.label}
               </button>
             ))}
           </div>
 
-          {/* Botones de exportación */}
           <button
             onClick={() => excelMutation.mutate()}
             disabled={excelMutation.isPending}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-600/20 border border-emerald-500/20 text-emerald-400 text-xs font-medium hover:bg-emerald-600/30 transition-all disabled:opacity-50"
+            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-600/15 border border-emerald-500/20 text-emerald-300 text-xs font-medium hover:bg-emerald-600/25 transition-colors disabled:opacity-50"
           >
-            <FileSpreadsheet size={14} />
-            {excelMutation.isPending ? 'Exportando...' : 'Excel'}
+            <FileSpreadsheet size={14} /> {excelMutation.isPending ? 'Exportando…' : 'Excel'}
           </button>
           <button
             onClick={() => pdfMutation.mutate()}
             disabled={pdfMutation.isPending}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-rose-600/20 border border-rose-500/20 text-rose-400 text-xs font-medium hover:bg-rose-600/30 transition-all disabled:opacity-50"
+            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-rose-600/15 border border-rose-500/20 text-rose-300 text-xs font-medium hover:bg-rose-600/25 transition-colors disabled:opacity-50"
           >
-            <FileText size={14} />
-            {pdfMutation.isPending ? 'Exportando...' : 'PDF'}
+            <FileText size={14} /> {pdfMutation.isPending ? 'Exportando…' : 'PDF'}
           </button>
         </div>
       </div>
 
-      {/* KPIs */}
+      {/* Horizonte 3D: reservas por día */}
+      <Reveal>
+        <BookingsSkyline
+          days={days}
+          todayKey={toLocalIsoDate(new Date())}
+          loading={periodLoading}
+          periodLabel={periodText + (selectedBusinessId ? ' · todos los negocios' : '')}
+        />
+      </Reveal>
+
+      {/* Métricas */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { label: 'Total reservas',   value: stats?.totalBookings ?? 0,                        icon: Calendar,   color: 'text-violet-400',  bg: 'bg-violet-500/10',  border: 'border-violet-500/20' },
-          { label: 'Ingresos totales', value: `${stats?.revenueTotal?.toFixed(2) ?? '0.00'}€`,  icon: DollarSign, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
-          { label: 'Este mes',         value: stats?.bookingsThisMonth ?? 0,                     icon: TrendingUp, color: 'text-blue-400',    bg: 'bg-blue-500/10',    border: 'border-blue-500/20' },
-          { label: 'Cancelaciones',    value: `${stats?.cancellationRate ?? 0}%`,                icon: XCircle,    color: 'text-rose-400',    bg: 'bg-rose-500/10',    border: 'border-rose-500/20' },
-        ].map(kpi => (
-          <div key={kpi.label} className={`stat-card bg-white/[0.03] border ${kpi.border} rounded-2xl p-5`}>
-            <div className={`w-9 h-9 ${kpi.bg} rounded-xl flex items-center justify-center mb-3`}>
-              <kpi.icon size={16} className={kpi.color} />
-            </div>
-            <p className="text-2xl font-bold text-white">{kpi.value}</p>
-            <p className="text-slate-500 text-xs mt-1">{kpi.label}</p>
-          </div>
+        {kpis.map((kpi, i) => (
+          <Reveal key={kpi.label} delay={i * STAGGER_MS}>
+            <TiltCard maxTilt={5}>
+              <div className="relative overflow-hidden rounded-[1.25rem] p-5">
+                <span className="kpi-glow" style={{ '--glow': kpi.glow } as React.CSSProperties} aria-hidden />
+                <div className={`w-9 h-9 ${kpi.bg} rounded-xl flex items-center justify-center mb-4`}>
+                  <kpi.icon size={16} className={kpi.color} />
+                </div>
+                <p className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">
+                  <CountUp value={kpi.value} kind={kpi.kind} />
+                </p>
+                <p className="text-slate-400 text-xs mt-1">{kpi.label}</p>
+              </div>
+            </TiltCard>
+          </Reveal>
         ))}
       </div>
 
-      {/* Gráfica de reservas por periodo */}
-      <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-6">
-        <div className="flex items-center gap-2 mb-6">
-          <BarChart3 size={16} className="text-violet-400" />
-          <h3 className="text-white font-semibold text-sm">Reservas por día</h3>
-          {selectedBusinessId && <span className="text-slate-500 text-xs">· todos los negocios</span>}
-        </div>
-        {periodLoading ? (
-          <div className="flex items-center justify-center h-48 text-slate-500 text-sm">Cargando datos...</div>
-        ) : periodData && periodData.length > 0 ? (
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={periodData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-              <XAxis dataKey="date" tick={{ fill: '#64748b', fontSize: 11 }}
-                tickFormatter={(v: string) => new Date(v).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} />
-              <YAxis tick={{ fill: '#64748b', fontSize: 11 }} />
-              <Tooltip
-                contentStyle={{ background: '#0d0d14', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, color: '#fff' }}
-                labelFormatter={(v) => new Date(v).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })} />
-              <Legend wrapperStyle={{ color: '#94a3b8', fontSize: 12 }} />
-              <Bar dataKey="confirmed" name="Confirmadas" fill="#7C3AED" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="cancelled" name="Canceladas" fill="#EF4444" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        ) : (
-          <div className="flex items-center justify-center h-48 text-slate-500 text-sm">Sin datos para este periodo</div>
-        )}
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-        {/* Gráfica de ingresos */}
-        <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-6">
-          <div className="flex items-center gap-2 mb-6">
-            <DollarSign size={16} className="text-emerald-400" />
-            <h3 className="text-white font-semibold text-sm">Ingresos por día</h3>
-          </div>
-          {periodData && periodData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={periodData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                <XAxis dataKey="date" tick={{ fill: '#64748b', fontSize: 11 }}
-                  tickFormatter={(v: string) => new Date(v).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} />
-                <YAxis tick={{ fill: '#64748b', fontSize: 11 }} tickFormatter={(v: number) => `${v}€`} />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Cobrado por día */}
+        <ChartCard
+          icon={Euro}
+          iconClass="text-emerald-300"
+          title="Cobrado por día"
+          subtitle={`${formatPrice(revenueInPeriod)} en los ${periodText} · solo reservas pagadas`}
+          className="lg:col-span-2"
+        >
+          {days.some(d => d.revenue > 0) ? (
+            <ResponsiveContainer width="100%" height={220}>
+              <AreaChart data={days} margin={{ top: 4, right: 8, left: -8, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="revenueFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={C.revenue} stopOpacity={0.4} />
+                    <stop offset="100%" stopColor={C.revenue} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid stroke={C.grid} vertical={false} />
+                <XAxis dataKey="key" tick={axisTick} tickFormatter={dayLabel} minTickGap={24} axisLine={false} tickLine={false} />
+                <YAxis tick={axisTick} tickFormatter={(v: number) => `${v} €`} axisLine={false} tickLine={false} width={56} />
                 <Tooltip
-                  contentStyle={{ background: '#0d0d14', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, color: '#fff' }}
-                  formatter={(v) => [`${v}€`, 'Ingresos']}
-                  labelFormatter={(v) => new Date(v).toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })} />
-                <Line type="monotone" dataKey="revenue" stroke="#10B981" strokeWidth={2}
-                  dot={{ fill: '#10B981', r: 3 }} activeDot={{ r: 5 }} />
-              </LineChart>
+                  cursor={{ stroke: 'rgba(255,255,255,0.25)', strokeDasharray: '3 3' }}
+                  content={<ChartTooltip labelFormatter={longDayLabel} valueFormatter={v => formatPrice(v)} />}
+                />
+                <Area type="monotone" dataKey="revenue" name="Cobrado" stroke={C.revenue} strokeWidth={2} fill="url(#revenueFill)"
+                  activeDot={{ r: 5, stroke: '#0a0a0f', strokeWidth: 2 }} {...anim} />
+              </AreaChart>
             </ResponsiveContainer>
           ) : (
-            <div className="flex items-center justify-center h-48 text-slate-500 text-sm">Sin datos</div>
+            <Empty text="Aún no hay reservas pagadas en este periodo" />
           )}
-        </div>
+        </ChartCard>
 
-        {/* Gráfica de pie */}
-        <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-6">
-          <div className="flex items-center gap-2 mb-6">
-            <Calendar size={16} className="text-blue-400" />
-            <h3 className="text-white font-semibold text-sm">Estado de reservas</h3>
-          </div>
-          {bookingStatusData.length > 0 ? (
-            <div className="flex flex-col items-center gap-4 sm:flex-row">
-              <ResponsiveContainer width="100%" height={180} className="sm:!w-3/5">
-                <PieChart>
-                  <Pie data={bookingStatusData} cx="50%" cy="50%" innerRadius={50} outerRadius={75} paddingAngle={3} dataKey="value">
-                    {bookingStatusData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                  </Pie>
-                  <Tooltip contentStyle={{ background: '#0d0d14', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, color: '#fff' }} />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="space-y-3">
-                {bookingStatusData.map((item, i) => (
-                  <div key={item.name} className="flex items-center gap-2">
-                    <div className="w-2.5 h-2.5 rounded-full" style={{ background: COLORS[i % COLORS.length] }} />
-                    <div>
-                      <p className="text-white text-xs font-medium">{item.name}</p>
-                      <p className="text-slate-500 text-xs">{item.value} reservas</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
+        {/* Tasa de cancelación (antes un gráfico circular de 2 porciones) */}
+        <ChartCard icon={XCircle} iconClass="text-rose-300" title="Cancelaciones" subtitle="Sobre el total de reservas" delay={STAGGER_MS}>
+          <div className="flex h-[220px] flex-col justify-center">
+            <p className="text-5xl font-semibold tracking-tight text-white">
+              <CountUp value={cancellationRate} kind="pct" />
+            </p>
+            <p className="mt-2 text-sm text-slate-400">
+              {stats?.cancelledBookings ?? 0} de {stats?.totalBookings ?? 0} reservas canceladas
+            </p>
+            <div
+              className="meter mt-6"
+              role="meter"
+              aria-label="Tasa de cancelación"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={cancellationRate}
+            >
+              <span style={{ '--scale': Math.min(100, Math.max(0, cancellationRate)) / 100 } as React.CSSProperties} />
             </div>
-          ) : (
-            <div className="flex items-center justify-center h-48 text-slate-500 text-sm">Sin datos</div>
-          )}
-        </div>
+            <div className="mt-2 flex justify-between text-[11px] text-slate-500"><span>0 %</span><span>100 %</span></div>
+          </div>
+        </ChartCard>
       </div>
 
-      {/* Gráfica de servicios */}
-      <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-6">
-        <div className="flex items-center gap-2 mb-6">
-          <Star size={16} className="text-yellow-400" />
-          <h3 className="text-white font-semibold text-sm">Servicios más populares</h3>
-        </div>
-        {servicesChartData.length > 0 ? (
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={servicesChartData} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" horizontal={false} />
-              <XAxis type="number" tick={{ fill: '#64748b', fontSize: 11 }} />
-              <YAxis dataKey="name" type="category" tick={{ fill: '#94a3b8', fontSize: 12 }} width={90} />
-              <Tooltip contentStyle={{ background: '#0d0d14', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, color: '#fff' }} />
-              <Legend wrapperStyle={{ color: '#94a3b8', fontSize: 12 }} />
-              <Bar dataKey="reservas" name="Reservas" fill="#7C3AED" radius={[0, 4, 4, 0]} />
-              <Bar dataKey="ingresos" name="Ingresos (€)" fill="#10B981" radius={[0, 4, 4, 0]} />
+      {/* Servicios: cada medida en su gráfica (antes compartían eje) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <ChartCard icon={Star} iconClass="text-violet-300" title="Reservas por servicio" subtitle="Servicios más populares">
+          {servicesByBookings.length ? (
+            <ResponsiveContainer width="100%" height={Math.max(180, servicesByBookings.length * 36)}>
+              <BarChart data={servicesByBookings} layout="vertical" margin={{ top: 0, right: 16, left: 0, bottom: 0 }} barCategoryGap={8}>
+                <CartesianGrid stroke={C.grid} horizontal={false} />
+                <XAxis type="number" tick={axisTick} allowDecimals={false} axisLine={false} tickLine={false} />
+                <YAxis dataKey="name" type="category" tick={{ fill: '#cbd5e1', fontSize: 12 }} width={130} axisLine={false} tickLine={false} />
+                <Tooltip
+                  cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+                  content={<ChartTooltip labelFormatter={(l) => servicesByBookings.find(s => s.name === l)?.full ?? String(l)} valueFormatter={v => `${v} reservas`} />}
+                />
+                <Bar dataKey="reservas" name="Reservas" fill={C.bookings} radius={[0, 4, 4, 0]} {...anim} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : <Empty />}
+        </ChartCard>
+
+        <ChartCard icon={Euro} iconClass="text-emerald-300" title="Ingresos por servicio" subtitle="Lo que más factura" delay={STAGGER_MS}>
+          {servicesByRevenue.length ? (
+            <ResponsiveContainer width="100%" height={Math.max(180, servicesByRevenue.length * 36)}>
+              <BarChart data={servicesByRevenue} layout="vertical" margin={{ top: 0, right: 16, left: 0, bottom: 0 }} barCategoryGap={8}>
+                <CartesianGrid stroke={C.grid} horizontal={false} />
+                <XAxis type="number" tick={axisTick} tickFormatter={(v: number) => `${v} €`} axisLine={false} tickLine={false} />
+                <YAxis dataKey="name" type="category" tick={{ fill: '#cbd5e1', fontSize: 12 }} width={130} axisLine={false} tickLine={false} />
+                <Tooltip
+                  cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+                  content={<ChartTooltip labelFormatter={(l) => servicesByRevenue.find(s => s.name === l)?.full ?? String(l)} valueFormatter={v => formatPrice(v)} />}
+                />
+                <Bar dataKey="ingresos" name="Ingresos" fill={C.revenue} radius={[0, 4, 4, 0]} {...anim} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : <Empty />}
+        </ChartCard>
+      </div>
+
+      {/* Equipo */}
+      <ChartCard icon={Users} iconClass="text-violet-300" title="Rendimiento del equipo" subtitle="Reservas completadas y canceladas por persona">
+        {staffChartData.length ? (
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={staffChartData} margin={{ top: 4, right: 8, left: -16, bottom: 0 }} barGap={2} barCategoryGap="28%">
+              <CartesianGrid stroke={C.grid} vertical={false} />
+              <XAxis dataKey="name" tick={{ fill: '#cbd5e1', fontSize: 12 }} axisLine={false} tickLine={false} />
+              <YAxis tick={axisTick} allowDecimals={false} axisLine={false} tickLine={false} />
+              <Tooltip cursor={{ fill: 'rgba(255,255,255,0.04)' }} content={<ChartTooltip valueFormatter={v => `${v}`} />} />
+              <Legend iconType="circle" iconSize={8} wrapperStyle={{ color: '#cbd5e1', fontSize: 12, paddingTop: 8 }} />
+              <Bar dataKey="completadas" name="Completadas" fill={C.bookings} radius={[4, 4, 0, 0]} {...anim} />
+              <Bar dataKey="canceladas" name="Canceladas" fill={C.cancelled} radius={[4, 4, 0, 0]} {...anim} />
             </BarChart>
           </ResponsiveContainer>
-        ) : (
-          <div className="flex items-center justify-center h-32 text-slate-500 text-sm">Sin datos de servicios</div>
-        )}
-      </div>
-
-      {/* Gráfica de staff */}
-      <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-6">
-        <div className="flex items-center gap-2 mb-6">
-          <Users size={16} className="text-violet-400" />
-          <h3 className="text-white font-semibold text-sm">Rendimiento del staff</h3>
-        </div>
-        {staffChartData.length > 0 ? (
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={staffChartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-              <XAxis dataKey="name" tick={{ fill: '#94a3b8', fontSize: 12 }} />
-              <YAxis tick={{ fill: '#64748b', fontSize: 11 }} />
-              <Tooltip contentStyle={{ background: '#0d0d14', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, color: '#fff' }} />
-              <Legend wrapperStyle={{ color: '#94a3b8', fontSize: 12 }} />
-              <Bar dataKey="completadas" name="Completadas" fill="#7C3AED" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="canceladas" name="Canceladas" fill="#EF4444" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        ) : (
-          <div className="flex items-center justify-center h-32 text-slate-500 text-sm">Sin datos de staff</div>
-        )}
-      </div>
-
+        ) : <Empty text="Sin datos del equipo todavía" />}
+      </ChartCard>
     </div>
   )
 }

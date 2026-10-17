@@ -6,11 +6,15 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Plus, Pencil, Trash2, Clock, DollarSign, ToggleLeft, ToggleRight, Scissors } from 'lucide-react'
+import { Plus, Pencil, Trash2, Clock, Scissors, Search, ChevronRight } from 'lucide-react'
 import type { Service } from '@/types'
 import { toast } from 'sonner'
 import { PageHeader } from '@/components/app/PageHeader'
 import { PageLoader } from '@/components/app/PageLoader'
+import { EmptyState } from '@/components/app/EmptyState'
+import { Segmented } from '@/components/app/Segmented'
+import { Switch } from '@/components/app/Switch'
+import { formatPrice } from '@/lib/labels'
 
 const onError = () => toast.error('No se pudo guardar. Revisa los datos e inténtalo de nuevo.')
 
@@ -21,6 +25,8 @@ export function ServicesPage() {
   const [showEditModal, setShowEditModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [selectedService, setSelectedService] = useState<Service | null>(null)
+  const [search, setSearch] = useState('')
+  const [sort, setSort] = useState<'name' | 'price' | 'duration'>('name')
 
   const [form, setForm] = useState({
     name: '', description: '', durationMinutes: 30, price: 0, isActive: true
@@ -121,6 +127,15 @@ export function ServicesPage() {
   const activeServices = services?.filter(s => s.isActive) ?? []
   const inactiveServices = services?.filter(s => !s.isActive) ?? []
 
+  const q = search.trim().toLowerCase()
+  const arrange = (list: Service[]) => list
+    .filter(s => !q || s.name.toLowerCase().includes(q) || (s.description ?? '').toLowerCase().includes(q))
+    .sort((a, b) => sort === 'price' ? b.price - a.price
+      : sort === 'duration' ? a.durationMinutes - b.durationMinutes
+      : a.name.localeCompare(b.name, 'es'))
+  const shownActive = arrange(activeServices)
+  const shownInactive = arrange(inactiveServices)
+
   return (
     <div className="space-y-6 max-w-5xl">
 
@@ -189,56 +204,101 @@ export function ServicesPage() {
         )
       })()}
 
-      {/* Servicios activos */}
+      {/* Búsqueda y orden */}
+      {!!services?.length && (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <label className="profile-field relative block sm:w-80">
+            <span className="sr-only">Buscar servicios</span>
+            <Search size={15} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar servicio"
+              className="h-10 w-full rounded-xl bg-transparent pl-10 pr-3 text-sm text-white outline-none placeholder:text-slate-500"
+            />
+          </label>
+          <Segmented
+            label="Ordenar servicios"
+            size="sm"
+            value={sort}
+            onChange={setSort}
+            options={[
+              { id: 'name', label: 'Nombre' },
+              { id: 'price', label: 'Precio' },
+              { id: 'duration', label: 'Duración' },
+            ]}
+          />
+        </div>
+      )}
+
       {servicesLoading ? (
-        <div className="flex items-center justify-center h-32 text-slate-500 text-sm">Cargando servicios...</div>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {Array.from({ length: 4 }, (_, i) => <div key={i} className="skeleton h-40" />)}
+        </div>
       ) : (
-        <div className="space-y-4">
-          {activeServices.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-slate-500 text-xs font-semibold uppercase tracking-widest">
-                Activos ({activeServices.length})
-              </p>
+        <div className="space-y-6">
+          {shownActive.length > 0 && (
+            <section className="space-y-3" aria-label="Servicios activos">
+              <h2 className="text-sm font-semibold text-white">
+                Activos <span className="font-normal text-slate-500">· {shownActive.length}</span>
+              </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {activeServices.map(s => (
+                {shownActive.map((s, i) => (
                   <ServiceCard
                     key={s.id}
+                    index={i}
                     service={s}
+                    toggling={toggleMutation.isPending && toggleMutation.variables?.id === s.id}
                     onEdit={() => openEdit(s)}
                     onDelete={() => openDelete(s)}
                     onToggle={() => toggleMutation.mutate(s)}
                   />
                 ))}
               </div>
-            </div>
+            </section>
           )}
 
-          {inactiveServices.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-slate-500 text-xs font-semibold uppercase tracking-widest">
-                Inactivos ({inactiveServices.length})
-              </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {inactiveServices.map(s => (
+          {shownInactive.length > 0 && (
+            <details className="inactive-group group" open={!!q}>
+              <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-semibold text-white">
+                <ChevronRight size={15} className="text-slate-400 transition-transform duration-300 group-open:rotate-90" />
+                Inactivos <span className="font-normal text-slate-500">· {shownInactive.length} · ocultos para tus clientes</span>
+              </summary>
+              <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                {shownInactive.map((s, i) => (
                   <ServiceCard
                     key={s.id}
+                    index={i}
                     service={s}
+                    toggling={toggleMutation.isPending && toggleMutation.variables?.id === s.id}
                     onEdit={() => openEdit(s)}
                     onDelete={() => openDelete(s)}
                     onToggle={() => toggleMutation.mutate(s)}
                   />
                 ))}
               </div>
+            </details>
+          )}
+
+          {!!services?.length && shownActive.length + shownInactive.length === 0 && (
+            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02]">
+              <EmptyState icon={Search} title="Ningún servicio coincide" text={`No hay resultados para "${search.trim()}".`} />
             </div>
           )}
 
           {!services?.length && (
-            <div className="flex flex-col items-center justify-center py-20 text-center">
-              <div className="w-16 h-16 bg-white/[0.03] border border-white/10 rounded-2xl flex items-center justify-center mb-4">
-                <Scissors size={24} className="text-slate-600" />
-              </div>
-              <p className="text-white font-medium">Sin servicios todavía</p>
-              <p className="text-slate-500 text-sm mt-1">Crea tu primer servicio pulsando el botón</p>
+            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02]">
+              <EmptyState
+                icon={Scissors}
+                title="Sin servicios todavía"
+                text="Crea tu primer servicio con su duración y precio para que tus clientes puedan reservarlo."
+                action={
+                  <Button onClick={() => setShowCreateModal(true)} disabled={!activeBusiness}
+                    className="bg-violet-600 hover:bg-violet-500 text-white rounded-xl px-4 h-10 flex items-center gap-2">
+                    <Plus size={16} /> Crear servicio
+                  </Button>
+                }
+              />
             </div>
           )}
         </div>
@@ -326,16 +386,11 @@ export function ServicesPage() {
                 <p className="text-white text-sm font-medium">Estado del servicio</p>
                 <p className="text-slate-500 text-xs">{form.isActive ? 'Visible para clientes' : 'Oculto para clientes'}</p>
               </div>
-              <button
-                type="button"
-                onClick={() => setForm(f => ({ ...f, isActive: !f.isActive }))}
-                className="transition-colors"
-              >
-                {form.isActive
-                  ? <ToggleRight size={28} className="text-emerald-400" />
-                  : <ToggleLeft size={28} className="text-slate-500" />
-                }
-              </button>
+              <Switch
+                checked={form.isActive}
+                onChange={v => setForm(f => ({ ...f, isActive: v }))}
+                label={form.isActive ? 'Desactivar servicio' : 'Activar servicio'}
+              />
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setShowEditModal(false)}
@@ -384,80 +439,67 @@ export function ServicesPage() {
   )
 }
 
-// Componente tarjeta de servicio
+/** Tarjeta de servicio: nombre, descripción, precio destacado, duración y acciones. */
 function ServiceCard({
-  service, onEdit, onDelete, onToggle
+  service, index, toggling, onEdit, onDelete, onToggle,
 }: {
   service: Service
+  index: number
+  toggling: boolean
   onEdit: () => void
   onDelete: () => void
   onToggle: () => void
 }) {
   return (
-    <div className={`bg-white/[0.03] border rounded-2xl p-4 transition-all hover:bg-white/[0.05] ${
-      service.isActive ? 'border-white/10' : 'border-white/[0.05] opacity-60'
-    }`}>
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center gap-3">
-          <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
-            service.isActive ? 'bg-violet-500/20 border border-violet-500/20' : 'bg-white/5 border border-white/10'
-          }`}>
-            <Scissors size={15} className={service.isActive ? 'text-violet-400' : 'text-slate-500'} />
-          </div>
-          <div>
-            <p className="text-white text-sm font-semibold">{service.name}</p>
-            {service.description && (
-              <p className="text-slate-500 text-xs mt-0.5 truncate max-w-[160px]">{service.description}</p>
-            )}
-          </div>
+    <article
+      style={{ '--i': index } as React.CSSProperties}
+      className={`list-in lift-card group/card flex flex-col rounded-2xl border p-5 ${
+        service.isActive ? 'border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.045]' : 'border-white/[0.06] bg-white/[0.015]'
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className={`font-semibold ${service.isActive ? 'text-white' : 'text-slate-300'}`}>{service.name}</h3>
+          {service.description
+            ? <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-400">{service.description}</p>
+            : <p className="mt-1 text-xs italic text-slate-500">Sin descripción</p>}
         </div>
-        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium border ${
-          service.isActive
-            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-            : 'bg-slate-500/10 text-slate-500 border-slate-500/20'
-        }`}>
-          {service.isActive ? 'Activo' : 'Inactivo'}
-        </span>
+        <Switch
+          checked={service.isActive}
+          onChange={onToggle}
+          disabled={toggling}
+          label={service.isActive ? `Desactivar ${service.name}` : `Activar ${service.name}`}
+        />
       </div>
 
-      <div className="flex items-center gap-4 mb-4">
-        <div className="flex items-center gap-1.5 text-slate-400 text-xs">
-          <Clock size={12} className="text-violet-400" />
-          {service.durationMinutes} min
+      <div className="mt-5 flex items-end justify-between gap-3">
+        <div className="flex items-baseline gap-3">
+          <span className={`text-2xl font-semibold tracking-tight tabular-nums ${service.isActive ? 'text-white' : 'text-slate-400'}`}>
+            {formatPrice(service.price)}
+          </span>
+          <span className="flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-xs text-slate-300 tabular-nums">
+            <Clock size={11} className="text-violet-300" /> {service.durationMinutes} min
+          </span>
         </div>
-        <div className="flex items-center gap-1.5 text-slate-400 text-xs">
-          <DollarSign size={12} className="text-emerald-400" />
-          {service.price.toFixed(2)}€
+        <div className="flex gap-1.5 opacity-80 transition-opacity group-hover/card:opacity-100">
+          <button
+            onClick={onEdit}
+            aria-label={`Editar ${service.name}`}
+            title="Editar"
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.03] text-slate-400 transition-colors hover:border-violet-500/30 hover:bg-violet-500/10 hover:text-violet-300"
+          >
+            <Pencil size={13} />
+          </button>
+          <button
+            onClick={onDelete}
+            aria-label={`Eliminar ${service.name}`}
+            title="Eliminar"
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.03] text-slate-400 transition-colors hover:border-rose-500/30 hover:bg-rose-500/10 hover:text-rose-300"
+          >
+            <Trash2 size={13} />
+          </button>
         </div>
       </div>
-
-      <div className="flex items-center gap-2 pt-3 border-t border-white/[0.05]">
-        <button
-          onClick={onToggle}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex-1 justify-center ${
-            service.isActive
-              ? 'bg-white/[0.03] hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 border border-white/[0.06] hover:border-rose-500/20'
-              : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20'
-          }`}
-        >
-          {service.isActive
-            ? <><ToggleLeft size={13} /> Desactivar</>
-            : <><ToggleRight size={13} /> Activar</>
-          }
-        </button>
-        <button
-          onClick={onEdit}
-          className="w-8 h-8 rounded-lg bg-white/[0.03] hover:bg-violet-500/10 border border-white/[0.06] hover:border-violet-500/20 flex items-center justify-center transition-all group"
-        >
-          <Pencil size={13} className="text-slate-500 group-hover:text-violet-400" />
-        </button>
-        <button
-          onClick={onDelete}
-          className="w-8 h-8 rounded-lg bg-white/[0.03] hover:bg-rose-500/10 border border-white/[0.06] hover:border-rose-500/20 flex items-center justify-center transition-all group"
-        >
-          <Trash2 size={13} className="text-slate-500 group-hover:text-rose-400" />
-        </button>
-      </div>
-    </div>
+    </article>
   )
 }

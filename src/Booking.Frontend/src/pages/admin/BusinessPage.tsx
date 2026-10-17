@@ -6,19 +6,78 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Plus, Users, Scissors, Clock, Phone, MapPin, Pencil, UserPlus, Power } from 'lucide-react'
-import type { Business } from '@/types'
+import { Plus, Users, Scissors, Clock, Phone, MapPin, Pencil, UserPlus, Building2, Copy } from 'lucide-react'
 import { toast } from 'sonner'
+import { profileApi } from '@/api/profile'
+import { formatPrice } from '@/lib/labels'
+import { cn } from '@/lib/utils'
 import { PageHeader } from '@/components/app/PageHeader'
 import { PageLoader } from '@/components/app/PageLoader'
 import { EmptyState } from '@/components/app/EmptyState'
-import { Building2 } from 'lucide-react'
+import { Segmented } from '@/components/app/Segmented'
+import { Switch } from '@/components/app/Switch'
+
+/** "09:00:00" → minutos desde medianoche */
+const toMinutes = (t: string) => {
+  const [h, m] = t.split(':').map(Number)
+  return h * 60 + (m || 0)
+}
+const hhmm = (t: string) => t.slice(0, 5)
+const nowMinutes = () => {
+  const d = new Date()
+  return d.getHours() * 60 + d.getMinutes()
+}
+
+/** Etiqueta de abierto o cerrado según la hora actual (los días de cierre aún no existen en el modelo). */
+function OpenBadge({ open, close }: { open: string; close: string }) {
+  const now = nowMinutes()
+  const isOpen = now >= toMinutes(open) && now < toMinutes(close)
+  return (
+    <span className={cn('flex flex-shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium',
+      isOpen ? 'bg-emerald-500/15 text-emerald-300' : 'bg-white/[0.06] text-slate-400')}>
+      <span className={cn('h-1.5 w-1.5 rounded-full', isOpen ? 'bg-emerald-400' : 'bg-slate-500')} />
+      {isOpen ? 'Abierto' : 'Cerrado'}
+    </span>
+  )
+}
+
+/** Horario sobre una barra de 24 h, con la hora actual marcada. */
+function HoursBar({ open, close }: { open: string; close: string }) {
+  const start = toMinutes(open)
+  const end = toMinutes(close)
+  const now = nowMinutes()
+  const isOpen = now >= start && now < end
+  const pct = (m: number) => `${(m / 1440) * 100}%`
+  return (
+    <div className="mt-6">
+      <div className="mb-2 flex items-center justify-between text-xs">
+        <span className="flex items-center gap-1.5 text-slate-400"><Clock size={12} /> Horario</span>
+        <span className="text-slate-300">
+          <span className="font-medium text-white tabular-nums">{hhmm(open)} – {hhmm(close)}</span>
+          {' · '}
+          <span className={isOpen ? 'text-emerald-300' : 'text-slate-400'}>{isOpen ? 'Abierto ahora' : 'Cerrado ahora'}</span>
+        </span>
+      </div>
+      <div className="hours-track" role="img" aria-label={`Abre a las ${hhmm(open)} y cierra a las ${hhmm(close)}`}>
+        <span className="hours-open" style={{ left: pct(start), width: pct(Math.max(0, end - start)) }} />
+        <span className="hours-now" style={{ left: pct(now) }} />
+      </div>
+      <div className="mt-1.5 flex justify-between text-[10px] text-slate-500 tabular-nums" aria-hidden>
+        <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span>
+      </div>
+    </div>
+  )
+}
+
+const initialsOf = (name: string) => name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase()).join('')
+/** Tono estable por persona, dentro de la gama violeta–índigo–rosa de la app. */
+const hueOf = (name: string) => 230 + ([...name].reduce((a, c) => a + c.charCodeAt(0), 0) % 90)
 
 const onError = () => toast.error('No se pudo guardar. Revisa los datos e inténtalo de nuevo.')
 
 export function BusinessPage() {
   const queryClient = useQueryClient()
-  const [selectedBusiness, setSelectedBusiness] = useState<Business | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showStaffModal, setShowStaffModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
@@ -40,6 +99,14 @@ export function BusinessPage() {
   const { data: businesses, isLoading } = useQuery({
     queryKey: ['businesses'],
     queryFn: businessApi.getAll,
+  })
+
+  // Se abre con el primer negocio seleccionado; los datos salen siempre de la lista actualizada
+  const selectedBusiness = businesses?.find(b => b.id === selectedId) ?? businesses?.[0] ?? null
+
+  const { data: profile } = useQuery({
+    queryKey: ['profile'],
+    queryFn: profileApi.get,
   })
 
   const { data: staff } = useQuery({
@@ -76,10 +143,9 @@ export function BusinessPage() {
         openTime: data.openTime as unknown as string,
         closeTime: data.closeTime as unknown as string,
       }),
-      onSuccess: (updatedBusiness) => {
+      onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ['businesses'] })
         // Actualiza el negocio seleccionado inmediatamente
-        setSelectedBusiness(prev => prev ? { ...prev, ...updatedBusiness } : null)
         setShowEditModal(false)
         toast.success('Cambios guardados')
       },
@@ -136,40 +202,37 @@ export function BusinessPage() {
 
         {/* Lista de negocios */}
         <div className="space-y-3">
-          <p className="text-slate-500 text-xs font-semibold uppercase tracking-widest">
-            Negocios ({businesses?.length ?? 0})
+          <p className="text-slate-400 text-xs font-semibold uppercase tracking-widest">
+            Negocios · {businesses?.length ?? 0}
           </p>
-          {businesses?.map(b => {
+          {businesses?.map((b, i) => {
             const config = getBusinessConfig(b.category)
+            const isSelected = selectedBusiness?.id === b.id
             return (
               <button
                 key={b.id}
-                onClick={() => setSelectedBusiness(b)}
-                className={`w-full text-left p-4 rounded-2xl border transition-all duration-150 ${
-                  selectedBusiness?.id === b.id
-                    ? `${config.bg} ${config.border}`
-                    : 'bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.05]'
+                onClick={() => setSelectedId(b.id)}
+                aria-pressed={isSelected}
+                style={{ '--i': i } as React.CSSProperties}
+                className={`list-in lift-card w-full text-left p-4 rounded-2xl border ${
+                  isSelected
+                    ? `${config.bg} ${config.border} shadow-[0_16px_40px_-24px_rgb(124_58_237_/_0.7)]`
+                    : 'bg-white/[0.03] border-white/[0.07] hover:bg-white/[0.05] hover:border-white/15'
                 }`}
               >
                 <div className="flex items-center gap-3">
                   <div className={`w-10 h-10 ${config.bg} rounded-xl flex items-center justify-center border ${config.border}`}>
                     <config.icon size={18} className={config.color} />
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="text-white text-sm font-medium truncate">{b.name}</p>
                     <p className={`text-xs font-medium ${config.color}`}>{config.label}</p>
                   </div>
+                  <OpenBadge open={b.openTime} close={b.closeTime} />
                 </div>
-                <div className="flex items-center gap-4 mt-3 pt-3 border-t border-white/[0.05]">
-                  <span className="flex items-center gap-1 text-slate-500 text-xs">
-                    <Scissors size={11} /> {b.totalServices} servicios
-                  </span>
-                  <span className="flex items-center gap-1 text-slate-500 text-xs">
-                    <Users size={11} /> {b.totalStaff} staff
-                  </span>
-                  <span className="flex items-center gap-1 text-slate-500 text-xs">
-                    <Clock size={11} /> {b.openTime}-{b.closeTime}
-                  </span>
+                <div className="flex items-center gap-4 mt-3 pt-3 border-t border-white/[0.06]">
+                  <span className="flex items-center gap-1 text-slate-400 text-xs"><Scissors size={11} /> {b.totalServices} servicios</span>
+                  <span className="flex items-center gap-1 text-slate-400 text-xs"><Users size={11} /> {b.totalStaff} en el equipo</span>
                 </div>
               </button>
             )
@@ -186,25 +249,40 @@ export function BusinessPage() {
         </div>
 
         {/* Detalle del negocio */}
-        {selectedBusiness ? (
-          <div className="lg:col-span-2 space-y-4">
-            {(() => {
-              const config = getBusinessConfig(selectedBusiness.category)
-              return (
-                <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-5 backdrop-blur-sm">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-12 h-12 ${config.bg} rounded-xl flex items-center justify-center border ${config.border}`}>
-                        <config.icon size={22} className={config.color} />
-                      </div>
-                      <div>
-                        <h2 className="text-white font-bold text-lg">{selectedBusiness.name}</h2>
-                        <p className={`text-sm font-medium ${config.color}`}>{config.label}</p>
-                      </div>
+        {selectedBusiness && (() => {
+          const config = getBusinessConfig(selectedBusiness.category)
+          const publicLink = profile ? `${window.location.origin}/book/${profile.tenantSubdomain}` : ''
+          const copyLink = async () => {
+            try {
+              await navigator.clipboard.writeText(publicLink)
+              toast.success('Enlace copiado')
+            } catch {
+              toast.error('No se pudo copiar el enlace.')
+            }
+          }
+          return (
+            <div key={selectedBusiness.id} className="page-enter lg:col-span-2 space-y-4">
+              <div className="glass-panel p-5 sm:p-6">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-12 h-12 ${config.bg} rounded-xl flex items-center justify-center border ${config.border}`}>
+                      <config.icon size={22} className={config.color} />
                     </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
+                    <div>
+                      <h2 className="text-white font-semibold text-xl tracking-tight">{selectedBusiness.name}</h2>
+                      <p className={`text-sm font-medium ${config.color}`}>{config.label}</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {publicLink && (
+                      <button
+                        onClick={copyLink}
+                        className="flex h-9 items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] px-3 text-xs font-medium text-slate-300 transition-colors hover:bg-white/[0.07] hover:text-white"
+                      >
+                        <Copy size={13} /> Copiar enlace público
+                      </button>
+                    )}
+                    <button
                       onClick={() => {
                         setEditForm({
                           name: selectedBusiness.name,
@@ -215,144 +293,117 @@ export function BusinessPage() {
                         })
                         setShowEditModal(true)
                       }}
-                      className="border-white/10 text-slate-300 hover:bg-white/5 rounded-xl h-8 text-xs"
+                      className="flex h-9 items-center gap-1.5 rounded-xl border border-violet-500/25 bg-violet-600/15 px-3 text-xs font-medium text-violet-200 transition-colors hover:bg-violet-600/25"
                     >
-                      <Pencil size={12} className="mr-1" /> Editar
-                    </Button>
+                      <Pencil size={12} /> Editar
+                    </button>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    {[
-                      { icon: Clock, label: 'Horario', value: `${selectedBusiness.openTime} - ${selectedBusiness.closeTime}` },
-                      { icon: Phone, label: 'Teléfono', value: selectedBusiness.phone ?? 'No especificado' },
-                      { icon: MapPin, label: 'Dirección', value: selectedBusiness.address ?? 'No especificada' },
-                    ].map(item => (
-                      <div key={item.label} className="p-3 bg-white/[0.02] border border-white/[0.05] rounded-xl">
-                        <item.icon size={13} className={`${config.color} mb-1.5`} />
-                        <p className="text-slate-500 text-[10px]">{item.label}</p>
-                        <p className="text-white text-xs font-medium mt-0.5 truncate">{item.value}</p>
+                </div>
+
+                {/* Horario como barra del día */}
+                <HoursBar open={selectedBusiness.openTime} close={selectedBusiness.closeTime} />
+
+                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {[
+                    { icon: Phone, label: 'Teléfono', value: selectedBusiness.phone || 'No especificado' },
+                    { icon: MapPin, label: 'Dirección', value: selectedBusiness.address || 'No especificada' },
+                  ].map(item => (
+                    <div key={item.label} className="flex items-center gap-3 p-3 bg-white/[0.02] border border-white/[0.06] rounded-xl">
+                      <item.icon size={14} className={config.color} />
+                      <div className="min-w-0">
+                        <p className="text-slate-400 text-[11px]">{item.label}</p>
+                        <p className="text-white text-sm truncate">{item.value}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <Segmented
+                asTabs
+                label="Contenido del negocio"
+                value={activeTab}
+                onChange={setActiveTab}
+                options={[
+                  { id: 'services', label: 'Servicios', icon: Scissors, count: services?.length },
+                  { id: 'staff', label: 'Equipo', icon: Users, count: staff?.length },
+                ]}
+              />
+
+              {/* Servicios */}
+              {activeTab === 'services' && (
+                <div className="profile-panel glass-panel p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-white font-semibold text-sm">Servicios del negocio</h3>
+                    <button
+                      onClick={() => setShowServiceModal(true)}
+                      className="flex h-8 items-center gap-1 rounded-xl border border-violet-500/20 bg-violet-600/15 px-3 text-xs font-medium text-violet-200 transition-colors hover:bg-violet-600/25"
+                    >
+                      <Plus size={12} /> Añadir
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {services?.map((s, i) => (
+                      <div key={s.id} style={{ '--i': i } as React.CSSProperties}
+                        className={`list-in flex items-center justify-between gap-3 p-3 bg-white/[0.02] border border-white/[0.06] rounded-xl ${s.isActive ? '' : 'opacity-60'}`}>
+                        <div className="min-w-0">
+                          <p className="text-white text-sm font-medium truncate">{s.name}</p>
+                          <p className="text-slate-400 text-xs mt-0.5 tabular-nums">{s.durationMinutes} min{s.isActive ? '' : ' · inactivo'}</p>
+                        </div>
+                        <p className="text-white text-sm font-semibold tabular-nums">{formatPrice(s.price)}</p>
                       </div>
                     ))}
+                    {!services?.length && (
+                      <p className="text-slate-500 text-sm text-center py-6">Sin servicios todavía</p>
+                    )}
                   </div>
                 </div>
-              )
-            })()}
+              )}
 
-            {/* Tabs */}
-            <div className="flex gap-1 bg-white/[0.03] border border-white/10 rounded-xl p-1 w-fit">
-              {[
-                { id: 'services', label: 'Servicios', icon: Scissors },
-                { id: 'staff', label: 'Staff', icon: Users },
-              ].map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id as 'services' | 'staff')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                    activeTab === tab.id
-                      ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/20'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <tab.icon size={13} />
-                  {tab.label}
-                </button>
-              ))}
+              {/* Equipo */}
+              {activeTab === 'staff' && (
+                <div className="profile-panel glass-panel p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-white font-semibold text-sm">Equipo</h3>
+                    <button
+                      onClick={() => setShowStaffModal(true)}
+                      className="flex h-8 items-center gap-1 rounded-xl border border-violet-500/20 bg-violet-600/15 px-3 text-xs font-medium text-violet-200 transition-colors hover:bg-violet-600/25"
+                    >
+                      <UserPlus size={12} /> Añadir
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {staff?.map((s, i) => (
+                      <div key={s.id} style={{ '--i': i } as React.CSSProperties}
+                        className="list-in flex items-center justify-between gap-3 p-3 bg-white/[0.02] border border-white/[0.06] rounded-xl">
+                        <div className={`flex min-w-0 items-center gap-3 ${s.isActive ? '' : 'opacity-60'}`}>
+                          <span className="staff-avatar" style={{ '--h': hueOf(s.name) } as React.CSSProperties} aria-hidden>
+                            {initialsOf(s.name)}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-white text-sm font-medium truncate">{s.name}</p>
+                            <p className="text-slate-400 text-xs truncate">
+                              {s.isActive ? `${s.totalBookings} reservas` : 'Inactivo · no recibe reservas'}
+                            </p>
+                          </div>
+                        </div>
+                        <Switch
+                          checked={s.isActive}
+                          onChange={() => toggleStaffMutation.mutate(s.id)}
+                          disabled={toggleStaffMutation.isPending && toggleStaffMutation.variables === s.id}
+                          label={s.isActive ? `Desactivar a ${s.name}` : `Activar a ${s.name}`}
+                        />
+                      </div>
+                    ))}
+                    {!staff?.length && (
+                      <p className="text-slate-500 text-sm text-center py-6 sm:col-span-2">Sin personas en el equipo todavía</p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
-
-            {/* Services */}
-            {activeTab === 'services' && (
-              <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-5 backdrop-blur-sm">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-white font-semibold text-sm flex items-center gap-2">
-                    <Scissors size={15} className="text-violet-400" /> Servicios
-                  </h3>
-                  <Button
-                    size="sm"
-                    onClick={() => setShowServiceModal(true)}
-                    className="bg-violet-600/20 hover:bg-violet-600/30 text-violet-400 border border-violet-500/20 rounded-xl h-8 text-xs"
-                  >
-                    <Plus size={12} className="mr-1" /> Añadir
-                  </Button>
-                </div>
-                <div className="space-y-2">
-                  {services?.map(s => (
-                    <div key={s.id} className="flex items-center justify-between p-3 bg-white/[0.02] border border-white/[0.05] rounded-xl">
-                      <div>
-                        <p className="text-white text-sm font-medium">{s.name}</p>
-                        <p className="text-slate-500 text-xs mt-0.5">{s.durationMinutes} min</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-white text-sm font-semibold">{s.price.toFixed(2)}€</p>
-                        <span className={`text-xs px-1.5 py-0.5 rounded-md ${
-                          s.isActive ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
-                        }`}>
-                          {s.isActive ? 'Activo' : 'Inactivo'}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                  {!services?.length && (
-                    <p className="text-slate-600 text-sm text-center py-6">Sin servicios</p>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Staff */}
-            {activeTab === 'staff' && (
-              <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-5 backdrop-blur-sm">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-white font-semibold text-sm flex items-center gap-2">
-                    <Users size={15} className="text-violet-400" /> Staff
-                  </h3>
-                  <Button
-                    size="sm"
-                    onClick={() => setShowStaffModal(true)}
-                    className="bg-violet-600/20 hover:bg-violet-600/30 text-violet-400 border border-violet-500/20 rounded-xl h-8 text-xs"
-                  >
-                    <UserPlus size={12} className="mr-1" /> Añadir
-                  </Button>
-                </div>
-                <div className="space-y-2">
-                  {staff?.map(s => (
-                    <div key={s.id} className="flex items-center justify-between p-3 bg-white/[0.02] border border-white/[0.05] rounded-xl">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-violet-500/20 rounded-lg flex items-center justify-center">
-                          <span className="text-violet-400 text-xs font-bold">{s.name.charAt(0)}</span>
-                        </div>
-                        <div>
-                          <p className="text-white text-sm font-medium">{s.name}</p>
-                          <p className="text-slate-500 text-xs">{s.email ?? 'Sin email'}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className={`text-xs px-1.5 py-0.5 rounded-md ${
-                          s.isActive ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
-                        }`}>
-                          {s.isActive ? 'Activo' : 'Inactivo'}
-                        </span>
-                        <button
-                          onClick={() => toggleStaffMutation.mutate(s.id)}
-                          aria-label={s.isActive ? `Desactivar a ${s.name}` : `Activar a ${s.name}`}
-                          title={s.isActive ? 'Desactivar' : 'Activar'}
-                          className="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors"
-                        >
-                          <Power size={12} className="text-slate-400" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                  {!staff?.length && (
-                    <p className="text-slate-600 text-sm text-center py-6">Sin staff</p>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="lg:col-span-2 flex items-center justify-center h-64 rounded-2xl border border-dashed border-white/10 text-slate-400 text-sm">
-            Selecciona un negocio para ver sus detalles
-          </div>
-        )}
+          )
+        })()}
       </div>
 
       {/* Modal crear negocio */}

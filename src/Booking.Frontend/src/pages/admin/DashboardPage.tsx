@@ -23,7 +23,8 @@ export function DashboardPage() {
   const { data: stats, isLoading } = useQuery({
     queryKey: ['dashboard', selectedBusinessId],
     queryFn: () => adminApi.getDashboard(selectedBusinessId),
-    enabled: true, // CAMBIA ESTO — siempre activo
+    staleTime: 0,
+    refetchInterval: 60_000,
   })
 
   if (isLoading) return <PageLoader label="Cargando estadísticas…" />

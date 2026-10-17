@@ -3,17 +3,35 @@ import { Link, useLocation } from 'react-router-dom'
 import { Calendar, Menu } from 'lucide-react'
 import { Sidebar } from './Sidebar'
 
+const COLLAPSE_KEY = 'sidebar-collapsed'
+
+function readCollapsed(): boolean {
+  try {
+    return localStorage.getItem(COLLAPSE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
 export function MainLayout({ children }: { children: React.ReactNode }) {
   const [menuOpen, setMenuOpen] = useState(false)
+  // Menú plegado a solo iconos (escritorio); se recuerda en este navegador
+  const [collapsed, setCollapsed] = useState(readCollapsed)
   const closeMenu = useCallback(() => setMenuOpen(false), [])
+  const toggleCollapsed = useCallback(() => {
+    setCollapsed(c => {
+      try { localStorage.setItem(COLLAPSE_KEY, c ? '0' : '1') } catch { /* sin almacenamiento: solo esta sesión */ }
+      return !c
+    })
+  }, [])
   const location = useLocation()
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f]">
+    <div className="app-shell min-h-screen bg-[#0a0a0f]" style={{ '--sidebar-w': collapsed ? '5rem' : '16rem' } as React.CSSProperties}>
       {/* Fondo estático: degradados suaves, retícula y grano */}
       <div className="app-backdrop pointer-events-none fixed inset-0" aria-hidden />
 
-      <Sidebar open={menuOpen} onClose={closeMenu} />
+      <Sidebar open={menuOpen} onClose={closeMenu} collapsed={collapsed} onToggleCollapsed={toggleCollapsed} />
 
       {/* Barra superior en móvil */}
       <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-white/[0.06] bg-[#0a0a0f]/80 px-4 backdrop-blur-lg lg:hidden">
@@ -33,7 +51,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         </button>
       </header>
 
-      <main className="relative z-10 px-4 py-6 sm:px-6 lg:ml-64 lg:px-10 lg:py-10">
+      <main className="app-main relative z-10 px-4 py-6 sm:px-6 lg:px-10 lg:py-10">
         {/* La clave fuerza la animación de entrada en cada cambio de pantalla */}
         <div key={location.pathname} className="page-enter mx-auto max-w-7xl">
           {children}

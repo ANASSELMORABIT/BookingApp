@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { isAxiosError } from 'axios'
+import { toLocalIsoDate } from '@/lib/labels'
 import { publicApi } from '@/api/public'
 import { getBusinessConfig } from '@/lib/businessIcons'
 import { Input } from '@/components/ui/input'
@@ -24,6 +26,8 @@ export function PublicBookingPage() {
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null)
   const [form, setForm] = useState({ fullName: '', email: '', phone: '', notes: '' })
   const [confirmed, setConfirmed] = useState<PublicBookingResult | null>(null)
+  const [bookingError, setBookingError] = useState('')
+  const queryClient = useQueryClient()
 
   const { data: businesses, isLoading, error } = useQuery({
     queryKey: ['public-business', subdomain],
@@ -31,10 +35,16 @@ export function PublicBookingPage() {
     enabled: !!subdomain,
   })
 
-  const { data: slots } = useQuery({
+  // La disponibilidad cambia con cada reserva: nunca se reutiliza una copia antigua
+  const { data: slots, isFetching: slotsFetching } = useQuery({
     queryKey: ['public-slots', selectedService?.id, selectedStaff?.id, selectedDate],
     queryFn: () => publicApi.getAvailability(selectedService!.id, selectedStaff!.id, selectedDate),
     enabled: !!selectedService && !!selectedStaff && !!selectedDate,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    refetchInterval: step === 2 ? 30_000 : false,
   })
 
   const bookMutation = useMutation({
@@ -47,7 +57,21 @@ export function PublicBookingPage() {
       phone:     form.phone || undefined,
       notes:     form.notes || undefined,
     }),
-    onSuccess: (data) => setConfirmed(data)
+    onSuccess: (data) => {
+      // Borra los huecos guardados: la hora recién reservada ya no está libre
+      queryClient.removeQueries({ queryKey: ['public-slots'] })
+      setConfirmed(data)
+    },
+    onError: (err) => {
+      const message = isAxiosError<{ message?: string }>(err) ? err.response?.data?.message : undefined
+      setBookingError(message ?? 'No se pudo crear la reserva. Revisa tu conexión e inténtalo de nuevo.')
+      // Si la hora se ha ocupado mientras tanto, vuelve a elegir con la lista actualizada
+      if (message?.includes('reservado') || message?.includes('pasada') || message?.includes('horario')) {
+        setSelectedSlot(null)
+        queryClient.invalidateQueries({ queryKey: ['public-slots'] })
+        setStep(2)
+      }
+    },
   })
 
   const business = selectedBusiness ?? businesses?.[0]
@@ -278,11 +302,23 @@ export function PublicBookingPage() {
                 <Input
                   type="date"
                   value={selectedDate}
-                  min={new Date().toISOString().split('T')[0]}
-                  onChange={e => { setSelectedDate(e.target.value); setSelectedSlot(null) }}
+                  min={toLocalIsoDate(new Date())}
+                  onChange={e => { setSelectedDate(e.target.value); setSelectedSlot(null); setBookingError('') }}
                   className="bg-white/5 border-white/10 text-white h-10 rounded-xl"
                 />
               </div>
+
+              {bookingError && (
+                <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-3" role="alert">
+                  <p className="text-rose-300 text-sm">{bookingError} Elige otra hora.</p>
+                </div>
+              )}
+
+              {selectedDate && !slots && slotsFetching && (
+                <div className="grid grid-cols-4 gap-2" aria-label="Cargando horas disponibles">
+                  {Array.from({ length: 8 }, (_, i) => <div key={i} className="skeleton h-9 !rounded-xl" />)}
+                </div>
+              )}
 
               {selectedDate && slots && (
                 <div className="space-y-2">
@@ -304,7 +340,7 @@ export function PublicBookingPage() {
                       {(slots as TimeSlot[]).filter(s => s.isAvailable).map(slot => (
                         <button
                           key={slot.startTime}
-                          onClick={() => setSelectedSlot(slot)}
+                          onClick={() => { setSelectedSlot(slot); setBookingError('') }}
                           className={`p-2 rounded-xl border text-center transition-all ${
                             selectedSlot?.startTime === slot.startTime
                               ? 'bg-violet-600/20 border-violet-500/40 text-violet-300'
@@ -409,7 +445,7 @@ export function PublicBookingPage() {
                 {[
                   { label: 'Servicio',    value: selectedService?.name },
                   { label: 'Profesional', value: selectedStaff?.name },
-                  { label: 'Fecha',       value: selectedDate ? new Date(selectedDate).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }) : '' },
+                  { label: 'Fecha',       value: selectedDate ? new Date(`${selectedDate}T00:00`).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }) : '' },
                   { label: 'Hora',        value: selectedSlot ? new Date(selectedSlot.startTime).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : '' },
                   { label: 'Duración',    value: `${selectedService?.durationMinutes} min` },
                   { label: 'Precio',      value: `${selectedService?.price.toFixed(2)}€` },
@@ -423,9 +459,9 @@ export function PublicBookingPage() {
                 ))}
               </div>
 
-              {bookMutation.isError && (
-                <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-3">
-                  <p className="text-rose-400 text-sm">Error al crear la reserva. Inténtalo de nuevo.</p>
+              {bookingError && (
+                <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-3" role="alert">
+                  <p className="text-rose-300 text-sm">{bookingError}</p>
                 </div>
               )}
 
@@ -435,7 +471,7 @@ export function PublicBookingPage() {
                   <ChevronLeft size={16} /> Atrás
                 </Button>
                 <Button
-                  onClick={() => bookMutation.mutate()}
+                  onClick={() => { setBookingError(''); bookMutation.mutate() }}
                   disabled={bookMutation.isPending}
                   className="bg-violet-600 hover:bg-violet-500 text-white rounded-xl h-10 shadow-lg shadow-violet-600/20"
                 >

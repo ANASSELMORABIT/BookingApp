@@ -10,6 +10,8 @@ API REST en **ASP.NET Core (.NET 10)** con **EF Core + PostgreSQL**, y SPA en **
 ![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6?style=flat-square&logo=typescript)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?style=flat-square&logo=postgresql)
 
+📄 **[Dossier del proyecto (PDF)](BookingApp_Dossier.pdf)**: resumen, funcionalidades, arquitectura, decisiones técnicas y estado, en 9 páginas.
+
 ---
 
 ## Funcionalidades
@@ -23,14 +25,17 @@ API REST en **ASP.NET Core (.NET 10)** con **EF Core + PostgreSQL**, y SPA en **
 - **Validación de reservas** común a la reserva autenticada y a la pública: empleado del mismo negocio, dentro del horario, no en el pasado y sin solapamientos con otras reservas del empleado.
 - **Página pública de reserva** (`/book/:slug`) en cuatro pasos: servicio y empleado → fecha y hora → datos personales → confirmación.
 - **Página de inicio con escena 3D** (`/`): presentación del producto con una escena WebGL (React Three Fiber) ligada al scroll, en la que las citas pasan "del caos al orden", y secciones de público, funciones y pasos. La escena se descarga aparte y solo en escritorio; en móvil, con "reducir movimiento" o sin WebGL se muestra una versión estática.
-- **Agenda** (`/agenda`): reservas del negocio de hoy, 7 o 30 días, agrupadas por día, con resumen (pendientes, confirmadas, ingresos previstos), filtros por estado, empleado y búsqueda, y aviso de la cita en curso y la siguiente.
+- **Agenda** (`/agenda`): tarjeta "Ahora" con la cita en curso (y su progreso) o la próxima con cuenta atrás, y las reservas de hoy, 7 o 30 días como línea de tiempo por día, con resumen (pendientes, confirmadas, ingresos previstos) y filtros por estado, empleado y búsqueda.
+- **Reservas** (`/bookings`): para el negocio, pestaña "Del negocio" con todas las reservas de sus clientes (incluidas las de la página pública), próximas y anteriores, y pestaña "Mías"; búsqueda por cliente, servicio o persona, y asistente de nueva reserva en tres pasos.
 - **Página pública para compartir** (`/share`): el enlace de reservas del negocio con botones para copiar, compartir y abrir, una vista previa de lo que verá el cliente y una lista de comprobación (negocio, servicios y equipo) antes de difundirlo.
-- **Calendario** de reservas con vistas de mes, semana y día (FullCalendar).
-- **Dashboard y estadísticas**: KPIs, gráficas con Recharts, ranking de servicios y rendimiento por empleado, con filtros por negocio y periodo.
+- **Calendario** de reservas con vistas de mes, semana y día (FullCalendar): cada reserva con el color de su estado, resumen de lo visible, filtros por persona y servicio, y detalle en un diálogo accesible.
+- **Dashboard y estadísticas**: KPIs, ranking de servicios y rendimiento por empleado. Estadísticas con un **horizonte 3D de reservas por día** (React Three Fiber; valores exactos al pasar el ratón y vista de tabla) y gráficas de Recharts con animaciones y paleta validada para daltonismo.
+- **Negocios y servicios**: horario sobre una barra de 24 h con "abierto o cerrado ahora", equipo con avatares e interruptor de activación, copia del enlace público, y servicios con búsqueda, orden por nombre, precio o duración e inactivos plegados.
+- **Perfil**: cabecera con avatar, edición con barra de "cambios sin guardar", cambio de contraseña con medidor de seguridad y requisitos en vivo, y datos de la sesión.
 - **Exportación** de reservas a Excel (ClosedXML) y de estadísticas a PDF (QuestPDF).
-- **Notificaciones en tiempo real** con SignalR al crear o cancelar reservas.
+- **Notificaciones en tiempo real** con SignalR al crear o cancelar reservas: además del aviso, recargan al momento calendario, agenda, dashboard y listas. La disponibilidad nunca se lee de caché, para no ofrecer horas ya ocupadas.
 - **Job recurrente con Hangfire** (cada hora) que localiza las reservas confirmadas de las próximas 24 h para enviar recordatorios.
-- **Interfaz adaptable y en español**: menú lateral que en móvil pasa a menú desplegable, estados de reserva y pago traducidos con colores comunes, confirmación antes de cancelar, avisos de éxito o error (Sonner), esqueletos de carga, estados vacíos con acción y página 404.
+- **Interfaz adaptable y en español**: menú lateral con indicador deslizante y contador de reservas de hoy, que se puede plegar a solo iconos en escritorio y pasa a menú desplegable en móvil; estados de reserva y pago traducidos con colores comunes, confirmación antes de cancelar, avisos de éxito o error (Sonner), esqueletos de carga, estados vacíos con acción y página 404. Todas las animaciones respetan "reducir movimiento".
 
 **Parciales / en desarrollo**
 
@@ -52,7 +57,7 @@ API REST en **ASP.NET Core (.NET 10)** con **EF Core + PostgreSQL**, y SPA en **
 | Documentación API | OpenAPI + Scalar (entorno Development) |
 | Frontend | React 19, TypeScript, Vite, React Router 7, TanStack Query, Axios |
 | UI | Tailwind CSS 4, componentes shadcn/ui (Radix), Recharts, FullCalendar, Sonner |
-| 3D | three.js, React Three Fiber, drei (solo en la página de inicio, cargado aparte) |
+| 3D | three.js, React Three Fiber, drei (página de inicio y Estadísticas, cargado aparte y solo en escritorio) |
 | Tests y CI | xUnit, EF Core InMemory, GitHub Actions |
 
 ---
@@ -81,10 +86,12 @@ tests/
 src/Booking.Frontend/src/
 ├── api/                 Clientes de la API (Axios) por área
 ├── components/
-│   ├── app/             Piezas comunes del panel: cabecera, estados, carga, vacíos, confirmación
+│   ├── app/             Piezas comunes del panel: cabecera, estados, carga, vacíos, confirmación,
+│   │                    selector deslizante, interruptor, bloque de fecha y números animados
 │   ├── landing/         Barra, tarjetas con inclinación y apariciones de la página de inicio
 │   ├── layout/          Layout del panel, menú lateral y notificaciones
-│   ├── three/           Escena 3D de la página de inicio
+│   ├── stats/           Horizonte de reservas y tooltip de las gráficas de Estadísticas
+│   ├── three/           Escenas 3D de la página de inicio y de Estadísticas
 │   └── ui/              Componentes shadcn/ui
 ├── hooks/               Notificaciones (SignalR), progreso de scroll, detección de 3D
 ├── lib/                 Textos de estados y roles, iconos por tipo de negocio, utilidades
@@ -97,13 +104,13 @@ src/Booking.Frontend/src/
 | `/login` · `/register` | Inicio de sesión y registro | Público |
 | `/book/:slug` | Reserva pública | Público |
 | `/dashboard` | KPIs, rendimiento del equipo y servicios más populares | Owner, Staff |
-| `/agenda` | Reservas del negocio por día | Owner, Staff |
+| `/agenda` | Cita actual o próxima y línea de tiempo por día | Owner, Staff |
 | `/calendar` | Calendario de reservas | Owner, Staff |
-| `/bookings` | Mis reservas y nueva reserva | Owner, Staff, Client |
+| `/bookings` | Reservas del negocio y propias, y nueva reserva | Owner, Staff, Client |
 | `/business` · `/services` | Negocios, equipo y servicios | Owner (servicios también Staff) |
-| `/stats` | Estadísticas y exportación | Owner |
+| `/stats` | Horizonte 3D, gráficas y exportación | Owner |
 | `/share` | Enlace público de reservas | Owner |
-| `/profile` | Perfil y contraseña | Todos |
+| `/profile` | Perfil, contraseña y sesión | Todos |
 
 ---
 
@@ -196,11 +203,12 @@ La base de datos arranca vacía. Regístrate desde `/register` indicando un iden
 dotnet test
 ```
 
-27 tests (xUnit) que se ejecutan también en GitHub Actions en cada push:
+31 tests (xUnit) que se ejecutan también en GitHub Actions en cada push:
 
 - **Dominio**: solapamiento entre reservas y cambio de estado.
 - **Reservas** (EF Core InMemory): conversión hora local ↔ UTC, solapamientos, reservas consecutivas, horario del negocio, fechas pasadas, reserva pública y aislamiento entre tenants.
 - **Disponibilidad**: huecos de toda la jornada (incluido el último), huecos ocupados y empleados de otro negocio.
+- **Flujo de la reserva pública**: una reserva bloquea la franja solo para el empleado elegido (también para servicios de otra duración), repetir la misma hora se rechaza mientras otro empleado puede tomarla, y el negocio ve la reserva en su lista.
 - **Registro y login**: slugs reservados o inválidos, imposibilidad de unirse a un tenant existente y mensajes de error que no revelan qué datos existen.
 
 El workflow de CI compila y prueba el backend y ejecuta lint y build del frontend.
