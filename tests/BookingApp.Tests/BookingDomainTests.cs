@@ -4,7 +4,7 @@ using Xunit;
 
 namespace BookingApp.Tests;
 
-public class AvailabilityTests
+public class BookingDomainTests
 {
     [Fact]
     public void Booking_OverlapsWith_ShouldReturnTrue_WhenOverlapping()

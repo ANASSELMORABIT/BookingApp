@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -22,6 +22,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\BookingApp.Application\BookingApp.Application.csproj" />
     <ProjectReference Include="..\..\src\BookingApp.Domain\BookingApp.Domain.csproj" />
+    <ProjectReference Include="..\..\src\BookingApp.Infrastructure\BookingApp.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>
