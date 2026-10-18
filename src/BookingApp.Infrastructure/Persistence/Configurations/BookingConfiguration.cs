@@ -12,6 +12,12 @@ public class BookingConfiguration : IEntityTypeConfiguration<Booking>
         builder.Property(b => b.Status).HasConversion<string>();
         builder.Property(b => b.PaymentStatus).HasConversion<string>();
         builder.Property(b => b.Notes).HasMaxLength(500);
+        builder.Property(b => b.TotalPrice).HasPrecision(10, 2);
+
+        builder.HasMany(b => b.Extras)
+               .WithOne()
+               .HasForeignKey(e => e.BookingId)
+               .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasOne(b => b.Service)
                .WithMany(s => s.Bookings)

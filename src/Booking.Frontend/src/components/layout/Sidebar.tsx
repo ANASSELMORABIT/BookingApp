@@ -9,7 +9,7 @@ import { roleLabel } from '@/lib/labels'
 import { cn } from '@/lib/utils'
 import {
   LayoutDashboard, CalendarCheck, CalendarDays, ListChecks, User,
-  Building2, LogOut, Scissors, BarChart3, Shield, Globe, Calendar, X, PanelLeftClose, PanelLeftOpen,
+  Building2, LogOut, Scissors, BarChart3, Shield, Globe, Calendar, X, PanelLeftClose, PanelLeftOpen, Users,
 } from 'lucide-react'
 import { NotificationBell } from './NotificationBell'
 
@@ -33,6 +33,7 @@ const navSections: {
     items: [
       { label: 'Negocios',       href: '/business', icon: Building2, roles: ['Owner', 'SuperAdmin'] },
       { label: 'Servicios',      href: '/services', icon: Scissors,  roles: ['Owner', 'Staff', 'SuperAdmin'] },
+      { label: 'Clientes',       href: '/clients',  icon: Users,     roles: ['Owner', 'SuperAdmin'] },
       { label: 'Estadísticas',   href: '/stats',    icon: BarChart3, roles: ['Owner', 'SuperAdmin'] },
       { label: 'Página pública', href: '/share',    icon: Globe,     roles: ['Owner', 'SuperAdmin'] },
     ],

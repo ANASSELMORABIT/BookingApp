@@ -13,6 +13,7 @@ export const BOOKING_STATUS: Record<string, StatusStyle> = {
   Confirmed: { label: 'Confirmada', color: '#10B981', badge: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20' },
   Completed: { label: 'Completada', color: '#3B82F6', badge: 'bg-blue-500/10 text-blue-300 border-blue-500/20' },
   Cancelled: { label: 'Cancelada',  color: '#EF4444', badge: 'bg-rose-500/10 text-rose-300 border-rose-500/20' },
+  NoShow:    { label: 'No presentado', color: '#A855F7', badge: 'bg-fuchsia-500/10 text-fuchsia-300 border-fuchsia-500/20' },
 }
 
 export const PAYMENT_STATUS: Record<string, StatusStyle> = {

@@ -1,5 +1,5 @@
 import client from './client'
-import type { Business, Service, Staff } from '@/types'
+import type { Business, BusinessPolicies, Service, ServiceExtra, Staff } from '@/types'
 
 export const businessApi = {
   getAll: () =>
@@ -34,4 +34,16 @@ export const businessApi = {
 
   toggleStaff: (staffId: string) =>
     client.put(`/Business/staff/${staffId}/toggle`).then(r => r.data),
+
+  updatePolicies: (id: string, data: BusinessPolicies) =>
+    client.put<BusinessPolicies>(`/Business/${id}/policies`, data).then(r => r.data),
+
+  addExtra: (serviceId: string, data: Omit<ServiceExtra, 'id'>) =>
+    client.post<ServiceExtra>(`/Business/services/${serviceId}/extras`, data).then(r => r.data),
+
+  updateExtra: (extraId: string, data: Omit<ServiceExtra, 'id'>) =>
+    client.put<ServiceExtra>(`/Business/extras/${extraId}`, data).then(r => r.data),
+
+  deleteExtra: (extraId: string) =>
+    client.delete(`/Business/extras/${extraId}`).then(r => r.data),
 }

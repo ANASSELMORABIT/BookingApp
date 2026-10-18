@@ -17,7 +17,8 @@ public class AvailabilityService : IAvailabilityService
 
     /// <summary>
     /// Devuelve los huecos del día para un servicio y un empleado, en hora local del negocio.
-    /// Los huecos duran lo mismo que el servicio y van desde la apertura hasta el cierre.
+    /// Los huecos empiezan cada "duración del servicio" desde la apertura y duran el servicio
+    /// más los minutos de los extras elegidos, sin pasar del cierre.
     /// </summary>
     public async Task<IEnumerable<TimeSlotDto>> GetAvailableSlotsAsync(AvailabilityRequestDto request)
     {
@@ -38,17 +39,21 @@ public class AvailabilityService : IAvailabilityService
         var existingBookings = await _context.Bookings
             .Where(b => b.StaffId == request.StaffId
                      && b.Status != BookingStatus.Cancelled
+                     && b.Status != BookingStatus.NoShow
                      && b.StartTime < closeUtc
                      && b.EndTime > openUtc)
             .ToListAsync();
+
+        var extras = await ServiceExtras.LoadAsync(_context, service.Id, request.ExtraIds);
+        var length = ServiceExtras.TotalMinutes(service, extras);
 
         var now = DateTime.UtcNow;
         var slots = new List<TimeSlotDto>();
         var current = openUtc;
 
-        while (current.AddMinutes(service.DurationMinutes) <= closeUtc)
+        while (current.AddMinutes(length) <= closeUtc)
         {
-            var slotEnd = current.AddMinutes(service.DurationMinutes);
+            var slotEnd = current.AddMinutes(length);
 
             slots.Add(new TimeSlotDto
             {
@@ -57,7 +62,8 @@ public class AvailabilityService : IAvailabilityService
                 IsAvailable = current > now && !existingBookings.Any(b => b.OverlapsWith(current, slotEnd))
             });
 
-            current = slotEnd;
+            // El inicio de cada hueco avanza según el servicio, aunque los extras alarguen la cita
+            current = current.AddMinutes(service.DurationMinutes);
         }
 
         return slots;

@@ -131,6 +131,7 @@ public class BusinessService : IBusinessService
             throw new InvalidOperationException("Negocio no encontrado.");
 
         var services = await _context.Services
+            .Include(s => s.Extras)
             .Where(s => s.BusinessId == businessId)
             .ToListAsync();
         return services.Select(MapServiceToDto);
@@ -144,6 +145,7 @@ public class BusinessService : IBusinessService
 
         var businesses = await _context.Businesses
             .Include(b => b.Services.Where(s => s.IsActive))
+                .ThenInclude(s => s.Extras.Where(e => e.IsActive))
             .Include(b => b.Staff.Where(s => s.IsActive))
             .Where(b => b.TenantId == tenant.Id)
             .ToListAsync();
@@ -160,9 +162,14 @@ public class BusinessService : IBusinessService
             Services  = b.Services.Select(s => new PublicServiceDto
             {
                 Id = s.Id, Name = s.Name, Description = s.Description,
-                DurationMinutes = s.DurationMinutes, Price = s.Price
+                DurationMinutes = s.DurationMinutes, Price = s.Price,
+                Extras = s.Extras.OrderBy(e => e.Price).Select(e => new PublicExtraDto
+                {
+                    Id = e.Id, Name = e.Name, Price = e.Price, ExtraMinutes = e.ExtraMinutes
+                }).ToList()
             }).ToList(),
-            Staff = b.Staff.Select(s => new PublicStaffDto { Id = s.Id, Name = s.Name }).ToList()
+            Staff = b.Staff.Select(s => new PublicStaffDto { Id = s.Id, Name = s.Name }).ToList(),
+            Policies = MapPolicies(b)
         });
     }
 
@@ -178,6 +185,8 @@ public class BusinessService : IBusinessService
             throw new UnauthorizedAccessException("Sin permisos para crear servicios.");
 
         var service = Service.Create(businessId, dto.Name, dto.DurationMinutes, dto.Price);
+        if (!string.IsNullOrWhiteSpace(dto.Description))
+            service.Update(dto.Name, dto.Description.Trim(), dto.DurationMinutes, dto.Price, true);
         _context.Services.Add(service);
         await _context.SaveChangesAsync();
         return MapServiceToDto(service);
@@ -187,9 +196,9 @@ public class BusinessService : IBusinessService
         Guid tenantId, string requesterRole)
     {
         var service = requesterRole == "SuperAdmin"
-            ? await _context.Services.Include(s => s.Business)
+            ? await _context.Services.Include(s => s.Business).Include(s => s.Extras)
                 .FirstOrDefaultAsync(s => s.Id == serviceId)
-            : await _context.Services.Include(s => s.Business)
+            : await _context.Services.Include(s => s.Business).Include(s => s.Extras)
                 .FirstOrDefaultAsync(s => s.Id == serviceId && s.Business.TenantId == tenantId);
 
         if (service is null)
@@ -221,6 +230,93 @@ public class BusinessService : IBusinessService
         await _context.SaveChangesAsync();
     }
 
+    // ---------- Normas del negocio ----------
+
+    public async Task<BusinessPoliciesDto> UpdatePoliciesAsync(Guid businessId, BusinessPoliciesDto dto, Guid tenantId, string role)
+    {
+        if (role != "Owner" && role != "SuperAdmin")
+            throw new UnauthorizedAccessException("Solo el propietario puede cambiar las normas.");
+
+        var business = await _context.Businesses
+            .FirstOrDefaultAsync(b => b.Id == businessId && (role == "SuperAdmin" || b.TenantId == tenantId))
+            ?? throw new InvalidOperationException("Negocio no encontrado.");
+
+        business.UpdatePolicies(dto.NoCompanionsPolicy, dto.AutoCancelLate, dto.LateToleranceMinutes,
+            dto.BlockLateCancellations, dto.CancellationNoticeHours, dto.ExtraPolicy);
+        await _context.SaveChangesAsync();
+        return MapPolicies(business);
+    }
+
+    // ---------- Extras de un servicio ----------
+
+    private Task<Service?> FindServiceAsync(Guid serviceId, Guid tenantId, string role) =>
+        _context.Services.Include(s => s.Business)
+            .FirstOrDefaultAsync(s => s.Id == serviceId && (role == "SuperAdmin" || s.Business.TenantId == tenantId));
+
+    private Task<ServiceExtra?> FindExtraAsync(Guid extraId, Guid tenantId, string role) =>
+        _context.ServiceExtras.Include(e => e.Service).ThenInclude(s => s.Business)
+            .FirstOrDefaultAsync(e => e.Id == extraId && (role == "SuperAdmin" || e.Service.Business.TenantId == tenantId));
+
+    public async Task<ServiceExtraDto> AddExtraAsync(Guid serviceId, SaveServiceExtraDto dto, Guid tenantId, string role)
+    {
+        if (role != "Owner" && role != "Staff" && role != "SuperAdmin")
+            throw new UnauthorizedAccessException("Sin permisos para crear extras.");
+
+        var service = await FindServiceAsync(serviceId, tenantId, role)
+            ?? throw new InvalidOperationException("Servicio no encontrado.");
+
+        var count = await _context.ServiceExtras.CountAsync(e => e.ServiceId == service.Id);
+        if (count >= 20)
+            throw new InvalidOperationException("Un servicio puede tener como máximo 20 extras.");
+
+        var extra = ServiceExtra.Create(service.Id, dto.Name, dto.Price, dto.ExtraMinutes);
+        if (!dto.IsActive) extra.Update(dto.Name, dto.Price, dto.ExtraMinutes, false);
+        _context.ServiceExtras.Add(extra);
+        await _context.SaveChangesAsync();
+        return MapExtraToDto(extra);
+    }
+
+    public async Task<ServiceExtraDto> UpdateExtraAsync(Guid extraId, SaveServiceExtraDto dto, Guid tenantId, string role)
+    {
+        if (role != "Owner" && role != "Staff" && role != "SuperAdmin")
+            throw new UnauthorizedAccessException("Sin permisos para editar extras.");
+
+        var extra = await FindExtraAsync(extraId, tenantId, role)
+            ?? throw new InvalidOperationException("Extra no encontrado.");
+
+        extra.Update(dto.Name, dto.Price, dto.ExtraMinutes, dto.IsActive);
+        await _context.SaveChangesAsync();
+        return MapExtraToDto(extra);
+    }
+
+    public async Task DeleteExtraAsync(Guid extraId, Guid tenantId, string role)
+    {
+        if (role != "Owner" && role != "SuperAdmin")
+            throw new UnauthorizedAccessException("Solo un Owner puede eliminar extras.");
+
+        var extra = await FindExtraAsync(extraId, tenantId, role)
+            ?? throw new InvalidOperationException("Extra no encontrado.");
+
+        // Las reservas ya hechas conservan su copia del extra
+        _context.ServiceExtras.Remove(extra);
+        await _context.SaveChangesAsync();
+    }
+
+    private static BusinessPoliciesDto MapPolicies(Business b) => new()
+    {
+        NoCompanionsPolicy      = b.NoCompanionsPolicy,
+        AutoCancelLate          = b.AutoCancelLate,
+        LateToleranceMinutes    = b.LateToleranceMinutes,
+        BlockLateCancellations  = b.BlockLateCancellations,
+        CancellationNoticeHours = b.CancellationNoticeHours,
+        ExtraPolicy             = b.ExtraPolicy,
+    };
+
+    private static ServiceExtraDto MapExtraToDto(ServiceExtra e) => new()
+    {
+        Id = e.Id, Name = e.Name, Price = e.Price, ExtraMinutes = e.ExtraMinutes, IsActive = e.IsActive
+    };
+
     private static BusinessResponseDto MapToDto(Business b) => new()
     {
         Id            = b.Id,
@@ -231,7 +327,8 @@ public class BusinessService : IBusinessService
         OpenTime      = b.OpenTime.ToString("HH:mm"),
         CloseTime     = b.CloseTime.ToString("HH:mm"),
         TotalServices = b.Services.Count,
-        TotalStaff    = b.Staff.Count
+        TotalStaff    = b.Staff.Count,
+        Policies      = MapPolicies(b)
     };
 
     private static ServiceResponseDto MapServiceToDto(Domain.Entities.Service s) => new()
@@ -241,6 +338,7 @@ public class BusinessService : IBusinessService
         Description     = s.Description,
         DurationMinutes = s.DurationMinutes,
         Price           = s.Price,
-        IsActive        = s.IsActive
+        IsActive        = s.IsActive,
+        Extras          = s.Extras.OrderBy(e => e.Price).Select(MapExtraToDto).ToList()
     };
 }

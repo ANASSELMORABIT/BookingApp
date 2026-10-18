@@ -11,4 +11,5 @@ public class BusinessResponseDto
     public string CloseTime { get; set; } = string.Empty;
     public int TotalServices { get; set; }
     public int TotalStaff { get; set; }
+    public BusinessPoliciesDto Policies { get; set; } = new();
 }

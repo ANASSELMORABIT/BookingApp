@@ -20,4 +20,9 @@ public interface IBusinessService
     Task<ServiceResponseDto> CreateServiceAsync(Guid businessId, CreateServiceDto dto, Guid tenantId, string requesterRole);
     Task<ServiceResponseDto> UpdateServiceAsync(Guid serviceId, UpdateServiceDto dto, Guid tenantId, string requesterRole);
     Task DeleteServiceAsync(Guid serviceId, Guid tenantId, string requesterRole);
+
+    Task<BusinessPoliciesDto> UpdatePoliciesAsync(Guid businessId, BusinessPoliciesDto dto, Guid tenantId, string role);
+    Task<ServiceExtraDto> AddExtraAsync(Guid serviceId, SaveServiceExtraDto dto, Guid tenantId, string role);
+    Task<ServiceExtraDto> UpdateExtraAsync(Guid extraId, SaveServiceExtraDto dto, Guid tenantId, string role);
+    Task DeleteExtraAsync(Guid extraId, Guid tenantId, string role);
 }

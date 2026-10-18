@@ -28,6 +28,7 @@ public class PublicBookingFlowTests
         StartTime = localStart,
         FullName = "Cliente Público",
         Email = email,
+        AcceptPolicies = true,
     };
 
     private static async Task<List<TimeSlotDto>> Slots(TestData d, Guid serviceId, Guid staffId) =>

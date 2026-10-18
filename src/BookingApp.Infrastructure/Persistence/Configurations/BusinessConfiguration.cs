@@ -11,6 +11,7 @@ public class BusinessConfiguration : IEntityTypeConfiguration<Business>
         builder.HasKey(b => b.Id);
         builder.Property(b => b.Name).IsRequired().HasMaxLength(100);
         builder.Property(b => b.Category).IsRequired().HasMaxLength(50);
+        builder.Property(b => b.ExtraPolicy).HasMaxLength(500);
 
         builder.HasOne(b => b.Tenant)
                .WithMany(t => t.Businesses)

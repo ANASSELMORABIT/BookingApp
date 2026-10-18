@@ -28,7 +28,7 @@ public class AvailabilityServiceTests
         var d = new TestData();
         await d.BookingService().CreateAsync(new CreateBookingDto
         {
-            ServiceId = d.ServiceA.Id, StaffId = d.StaffA.Id, StartTime = d.Local(10)
+            ServiceId = d.ServiceA.Id, StaffId = d.StaffA.Id, StartTime = d.Local(10), AcceptPolicies = true
         }, d.OwnerA.Id, d.TenantA.Id, "Owner");
 
         var slots = await d.AvailabilityService().GetAvailableSlotsAsync(new AvailabilityRequestDto

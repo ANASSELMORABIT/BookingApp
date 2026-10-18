@@ -52,6 +52,35 @@ public sealed class TestData
 
     public AvailabilityService AvailabilityService() => new(Db);
 
+    public BusinessService BusinessService() => new(Db);
+
+    public ClientService ClientService() => new(Db);
+
+    public BookingApp.Infrastructure.Jobs.LateBookingJob LateBookingJob() =>
+        new(Db, Notifications, NullLogger<BookingApp.Infrastructure.Jobs.LateBookingJob>.Instance);
+
+    /// <summary>Cliente (rol Client) del negocio A.</summary>
+    public AppUser AddClient(string email = "cliente@a.com", Guid? tenantId = null)
+    {
+        var user = AppUser.Create(tenantId ?? TenantA.Id, email, "Cliente Prueba", "Client");
+        Db.Users.Add(user);
+        Db.SaveChanges();
+        return user;
+    }
+
+    /// <summary>
+    /// Reserva de 30 min con Ana a una hora UTC concreta, sin pasar por la validación
+    /// (para probar cancelaciones de última hora o retrasos).
+    /// </summary>
+    public Booking AddBookingAtUtc(DateTime startUtc, AppUser client)
+    {
+        var booking = Booking.Create(ServiceA.Id, StaffA.Id, client.Id, startUtc, ServiceA.DurationMinutes);
+        booking.ApplyPricing(ServiceA.Price, Array.Empty<ServiceExtra>());
+        Db.Bookings.Add(booking);
+        Db.SaveChanges();
+        return booking;
+    }
+
     /// <summary>Hora local del negocio en <see cref="Day"/>.</summary>
     public DateTime Local(int hour, int minute = 0) => Day.ToDateTime(new TimeOnly(hour, minute));
 }
@@ -68,6 +97,11 @@ public sealed class FakeNotifications : INotificationService
 
     public Task SendBookingConfirmedAsync(Guid tenantId, string clientName, string serviceName, DateTime startTime)
     { Sent.Add($"confirmed:{tenantId}"); return Task.CompletedTask; }
+
+    public List<(Guid TenantId, string Title, string Message)> Alerts { get; } = new();
+
+    public Task SendAlertAsync(Guid tenantId, string title, string message)
+    { Alerts.Add((tenantId, title, message)); Sent.Add($"alert:{tenantId}"); return Task.CompletedTask; }
 }
 
 public sealed class FakeEmail : IEmailService

@@ -32,6 +32,8 @@ public static class DependencyInjection
         services.AddScoped<IBusinessService, BusinessService>();
         services.AddScoped<IAdminService, AdminService>();
         services.AddScoped<BookingReminderJob>();
+        services.AddScoped<LateBookingJob>();
+        services.AddScoped<IClientService, ClientService>();
         services.AddScoped<INotificationService, NotificationService>();
         services.AddScoped<IExportService, ExportService>();
         // services.AddSignalR();

@@ -12,6 +12,7 @@ public class AppUserConfiguration : IEntityTypeConfiguration<AppUser>
         builder.Property(u => u.Email).IsRequired().HasMaxLength(150);
         builder.Property(u => u.FullName).IsRequired().HasMaxLength(100);
         builder.Property(u => u.Role).IsRequired().HasMaxLength(20);
+        builder.Property(u => u.BlockedReason).HasMaxLength(200);
         builder.HasIndex(u => new { u.TenantId, u.Email }).IsUnique();
         builder.HasOne(u => u.Tenant)
        .WithMany()

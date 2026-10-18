@@ -7,4 +7,7 @@ public class PublicBookingResultDto
     public DateTime StartTime { get; set; }
     public DateTime EndTime { get; set; }
     public string Message { get; set; } = string.Empty;
+    public decimal BasePrice { get; set; }
+    public decimal TotalPrice { get; set; }
+    public List<BookingExtraDto> Extras { get; set; } = new();
 }

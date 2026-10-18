@@ -8,4 +8,5 @@ public class ServiceResponseDto
     public int DurationMinutes { get; set; }
     public decimal Price { get; set; }
     public bool IsActive { get; set; }
+    public List<ServiceExtraDto> Extras { get; set; } = new();
 }

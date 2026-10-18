@@ -2,7 +2,11 @@ import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { isAxiosError } from 'axios'
-import { toLocalIsoDate } from '@/lib/labels'
+import { formatPrice, toLocalIsoDate } from '@/lib/labels'
+import { ExtrasPicker } from '@/components/booking/ExtrasPicker'
+import { PriceSummary } from '@/components/booking/PriceSummary'
+import { PoliciesNotice } from '@/components/booking/PoliciesNotice'
+import { hasPolicies } from '@/lib/policies'
 import { publicApi } from '@/api/public'
 import { getBusinessConfig } from '@/lib/businessIcons'
 import { Input } from '@/components/ui/input'
@@ -27,18 +31,23 @@ export function PublicBookingPage() {
   const [form, setForm] = useState({ fullName: '', email: '', phone: '', notes: '' })
   const [confirmed, setConfirmed] = useState<PublicBookingResult | null>(null)
   const [bookingError, setBookingError] = useState('')
+  const [selectedExtraIds, setSelectedExtraIds] = useState<string[]>([])
+  const [acceptPolicies, setAcceptPolicies] = useState(false)
   const queryClient = useQueryClient()
 
   const { data: businesses, isLoading, error } = useQuery({
     queryKey: ['public-business', subdomain],
     queryFn: () => publicApi.getBusiness(subdomain!),
     enabled: !!subdomain,
+    // Servicios, extras y normas pueden cambiar en cualquier momento: siempre datos frescos
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   })
 
   // La disponibilidad cambia con cada reserva: nunca se reutiliza una copia antigua
   const { data: slots, isFetching: slotsFetching } = useQuery({
-    queryKey: ['public-slots', selectedService?.id, selectedStaff?.id, selectedDate],
-    queryFn: () => publicApi.getAvailability(selectedService!.id, selectedStaff!.id, selectedDate),
+    queryKey: ['public-slots', selectedService?.id, selectedStaff?.id, selectedDate, selectedExtraIds.join(',')],
+    queryFn: () => publicApi.getAvailability(selectedService!.id, selectedStaff!.id, selectedDate, selectedExtraIds),
     enabled: !!selectedService && !!selectedStaff && !!selectedDate,
     staleTime: 0,
     gcTime: 0,
@@ -56,6 +65,8 @@ export function PublicBookingPage() {
       email:     form.email,
       phone:     form.phone || undefined,
       notes:     form.notes || undefined,
+      extraIds:  chosenExtras.map(e => e.id),
+      acceptPolicies,
     }),
     onSuccess: (data) => {
       // Borra los huecos guardados: la hora recién reservada ya no está libre
@@ -76,6 +87,11 @@ export function PublicBookingPage() {
 
   const business = selectedBusiness ?? businesses?.[0]
   const config = business ? getBusinessConfig(business.category) : null
+  // Se usa el servicio tal como llega ahora de la API (no la copia guardada al elegirlo)
+  const currentService = business?.services.find(s => s.id === selectedService?.id) ?? selectedService
+  const serviceExtras = currentService?.extras ?? []
+  const chosenExtras = serviceExtras.filter(e => selectedExtraIds.includes(e.id))
+  const mustAccept = hasPolicies(business?.policies)
 
   if (isLoading) return (
     <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
@@ -113,6 +129,8 @@ export function PublicBookingPage() {
             { label: 'Servicio', value: confirmed.serviceName },
             { label: 'Fecha', value: new Date(confirmed.startTime).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }) },
             { label: 'Hora', value: new Date(confirmed.startTime).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) },
+            ...confirmed.extras.map(e => ({ label: `+ ${e.name}`, value: formatPrice(e.price) })),
+            { label: 'Total a pagar', value: formatPrice(confirmed.totalPrice) },
           ].map(item => (
             <div key={item.label} className="flex justify-between text-sm">
               <span className="text-slate-500">{item.label}</span>
@@ -121,7 +139,7 @@ export function PublicBookingPage() {
           ))}
         </div>
         <Button
-          onClick={() => { setConfirmed(null); setStep(1); setSelectedService(null); setSelectedStaff(null); setSelectedDate(''); setSelectedSlot(null); setForm({ fullName: '', email: '', phone: '', notes: '' }) }}
+          onClick={() => { setConfirmed(null); setStep(1); setSelectedService(null); setSelectedStaff(null); setSelectedDate(''); setSelectedSlot(null); setSelectedExtraIds([]); setAcceptPolicies(false); setForm({ fullName: '', email: '', phone: '', notes: '' }) }}
           className="w-full bg-violet-600 hover:bg-violet-500 text-white rounded-xl h-10"
         >
           Hacer otra reserva
@@ -224,7 +242,7 @@ export function PublicBookingPage() {
                   {business.services.map((s: PublicService) => (
                     <button
                       key={s.id}
-                      onClick={() => setSelectedService(s)}
+                      onClick={() => { if (selectedService?.id !== s.id) { setSelectedExtraIds([]); setSelectedSlot(null) } setSelectedService(s) }}
                       className={`w-full p-4 rounded-xl border text-left transition-all ${
                         selectedService?.id === s.id
                           ? 'bg-violet-600/20 border-violet-500/40'
@@ -249,6 +267,15 @@ export function PublicBookingPage() {
                   ))}
                 </div>
               </div>
+
+              {currentService && serviceExtras.length > 0 && (
+                <div className="space-y-3">
+                  <ExtrasPicker extras={serviceExtras} selected={selectedExtraIds} onChange={ids => { setSelectedExtraIds(ids); setSelectedSlot(null) }} />
+                  <p className="text-right text-sm text-slate-400">
+                    Total: <span className="font-semibold text-white">{formatPrice(currentService.price + chosenExtras.reduce((t, e) => t + e.price, 0))}</span>
+                  </p>
+                </div>
+              )}
 
               {selectedService && (
                 <div>
@@ -447,8 +474,6 @@ export function PublicBookingPage() {
                   { label: 'Profesional', value: selectedStaff?.name },
                   { label: 'Fecha',       value: selectedDate ? new Date(`${selectedDate}T00:00`).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }) : '' },
                   { label: 'Hora',        value: selectedSlot ? new Date(selectedSlot.startTime).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : '' },
-                  { label: 'Duración',    value: `${selectedService?.durationMinutes} min` },
-                  { label: 'Precio',      value: `${selectedService?.price.toFixed(2)}€` },
                   { label: 'Nombre',      value: form.fullName },
                   { label: 'Email',       value: form.email },
                 ].map(item => (
@@ -458,6 +483,19 @@ export function PublicBookingPage() {
                   </div>
                 ))}
               </div>
+
+              {selectedService && (
+                <PriceSummary
+                  serviceName={selectedService.name}
+                  servicePrice={selectedService.price}
+                  serviceMinutes={selectedService.durationMinutes}
+                  extras={chosenExtras}
+                />
+              )}
+
+              {business && (
+                <PoliciesNotice policies={business.policies} accepted={acceptPolicies} onAcceptedChange={setAcceptPolicies} />
+              )}
 
               {bookingError && (
                 <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-3" role="alert">
@@ -472,7 +510,7 @@ export function PublicBookingPage() {
                 </Button>
                 <Button
                   onClick={() => { setBookingError(''); bookMutation.mutate() }}
-                  disabled={bookMutation.isPending}
+                  disabled={bookMutation.isPending || (mustAccept && !acceptPolicies)}
                   className="bg-violet-600 hover:bg-violet-500 text-white rounded-xl h-10 shadow-lg shadow-violet-600/20"
                 >
                   {bookMutation.isPending ? (

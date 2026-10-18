@@ -10,4 +10,8 @@ public class PublicBookingDto
     public string Email { get; set; } = string.Empty;
     public string? Phone { get; set; }
     public string? Notes { get; set; }
+    /// <summary>Extras elegidos del servicio (opcional).</summary>
+    public List<Guid> ExtraIds { get; set; } = new();
+    /// <summary>El cliente ha leído y aceptado las normas del negocio.</summary>
+    public bool AcceptPolicies { get; set; }
 }

@@ -15,6 +15,7 @@ import { PublicBookingPage } from '@/pages/public/PublicBookingPage'
 import { LandingPage } from '@/pages/public/LandingPage'
 import { AgendaPage } from '@/pages/admin/AgendaPage'
 import { SharePage } from '@/pages/admin/SharePage'
+import { ClientsPage } from '@/pages/admin/ClientsPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 
 
@@ -78,6 +79,12 @@ export default function App() {
       <Route path="/share" element={
         <ProtectedRoute allowedRoles={['Owner', 'SuperAdmin']}>
           <MainLayout><SharePage /></MainLayout>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/clients" element={
+        <ProtectedRoute allowedRoles={['Owner', 'SuperAdmin']}>
+          <MainLayout><ClientsPage /></MainLayout>
         </ProtectedRoute>
       } />
 

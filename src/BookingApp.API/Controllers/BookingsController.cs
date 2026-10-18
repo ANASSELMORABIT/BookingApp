@@ -86,4 +86,21 @@ public class BookingsController : ControllerBase
             return BadRequest(new { message = ex.Message });
         }
     }
+
+    // PUT /api/Bookings/{id}/arrived — el cliente ha llegado (evita la cancelación por retraso)
+    [HttpPut("{id}/arrived")]
+    [Authorize(Policy = "OwnerOrStaff")]
+    public async Task<IActionResult> MarkArrived(Guid id)
+    {
+        try
+        {
+            var tenantId = Guid.Parse(User.FindFirstValue("tenant_id")!);
+            var role = User.FindFirstValue(ClaimTypes.Role)!;
+            return Ok(await _bookingService.MarkArrivedAsync(id, tenantId, role));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
 }

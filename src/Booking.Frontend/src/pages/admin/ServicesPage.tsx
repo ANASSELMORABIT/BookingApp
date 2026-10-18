@@ -15,6 +15,9 @@ import { EmptyState } from '@/components/app/EmptyState'
 import { Segmented } from '@/components/app/Segmented'
 import { Switch } from '@/components/app/Switch'
 import { formatPrice } from '@/lib/labels'
+import { ExtrasDialog } from '@/components/booking/ExtrasDialog'
+import { useAuth } from '@/context/AuthContext'
+import { Sparkles } from 'lucide-react'
 
 const onError = () => toast.error('No se pudo guardar. Revisa los datos e inténtalo de nuevo.')
 
@@ -24,6 +27,8 @@ export function ServicesPage() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [extrasServiceId, setExtrasServiceId] = useState<string | null>(null)
+  const { user } = useAuth()
   const [selectedService, setSelectedService] = useState<Service | null>(null)
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<'name' | 'price' | 'duration'>('name')
@@ -251,6 +256,7 @@ export function ServicesPage() {
                     toggling={toggleMutation.isPending && toggleMutation.variables?.id === s.id}
                     onEdit={() => openEdit(s)}
                     onDelete={() => openDelete(s)}
+                    onExtras={() => setExtrasServiceId(s.id)}
                     onToggle={() => toggleMutation.mutate(s)}
                   />
                 ))}
@@ -273,6 +279,7 @@ export function ServicesPage() {
                     toggling={toggleMutation.isPending && toggleMutation.variables?.id === s.id}
                     onEdit={() => openEdit(s)}
                     onDelete={() => openDelete(s)}
+                    onExtras={() => setExtrasServiceId(s.id)}
                     onToggle={() => toggleMutation.mutate(s)}
                   />
                 ))}
@@ -303,6 +310,15 @@ export function ServicesPage() {
           )}
         </div>
       )}
+
+      {/* Extras del servicio (se leen de la lista para verlos siempre actualizados) */}
+      <ExtrasDialog
+        service={services?.find(s => s.id === extrasServiceId) ?? null}
+        businessId={activeBusiness?.id}
+        open={!!extrasServiceId}
+        onOpenChange={open => { if (!open) setExtrasServiceId(null) }}
+        canDelete={user?.role === 'Owner' || user?.role === 'SuperAdmin'}
+      />
 
       {/* Modal crear */}
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
@@ -441,7 +457,7 @@ export function ServicesPage() {
 
 /** Tarjeta de servicio: nombre, descripción, precio destacado, duración y acciones. */
 function ServiceCard({
-  service, index, toggling, onEdit, onDelete, onToggle,
+  service, index, toggling, onEdit, onDelete, onToggle, onExtras,
 }: {
   service: Service
   index: number
@@ -449,6 +465,7 @@ function ServiceCard({
   onEdit: () => void
   onDelete: () => void
   onToggle: () => void
+  onExtras: () => void
 }) {
   return (
     <article
@@ -470,6 +487,24 @@ function ServiceCard({
           disabled={toggling}
           label={service.isActive ? `Desactivar ${service.name}` : `Activar ${service.name}`}
         />
+      </div>
+
+      {/* Extras: el cliente los añade al reservar */}
+      <div className="mt-4 flex flex-wrap items-center gap-1.5">
+        {service.extras.filter(e => e.isActive).slice(0, 3).map(e => (
+          <span key={e.id} className="rounded-full border border-violet-500/20 bg-violet-500/10 px-2 py-0.5 text-[11px] text-violet-200">
+            {e.name} · +{formatPrice(e.price)}
+          </span>
+        ))}
+        {service.extras.filter(e => e.isActive).length > 3 && (
+          <span className="text-[11px] text-slate-400">+{service.extras.filter(e => e.isActive).length - 3} más</span>
+        )}
+        <button
+          onClick={onExtras}
+          className="flex items-center gap-1 rounded-full border border-dashed border-white/15 px-2 py-0.5 text-[11px] text-slate-300 transition-colors hover:border-violet-400/50 hover:text-white"
+        >
+          <Sparkles size={11} /> {service.extras.length ? 'Gestionar extras' : 'Añadir extras'}
+        </button>
       </div>
 
       <div className="mt-5 flex items-end justify-between gap-3">

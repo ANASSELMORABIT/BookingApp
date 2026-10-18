@@ -9,4 +9,5 @@ public interface IBookingService
     Task<IEnumerable<BookingResponseDto>> GetByClientAsync(Guid clientId);
     Task<IEnumerable<BookingResponseDto>> GetByBusinessAsync(Guid businessId, DateOnly from, DateOnly to, Guid tenantId, string role);
     Task<BookingResponseDto> CancelAsync(Guid bookingId, Guid clientId);
+    Task<BookingResponseDto> MarkArrivedAsync(Guid bookingId, Guid tenantId, string role);
 }

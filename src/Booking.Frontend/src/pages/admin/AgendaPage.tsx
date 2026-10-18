@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { CalendarDays, Clock, Euro, Hourglass, ListChecks, Search, Sparkles, User } from 'lucide-react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import { isAxiosError } from 'axios'
+import { AlertTriangle, CalendarDays, Clock, DoorOpen, Euro, Hourglass, ListChecks, Search, Sparkles, User } from 'lucide-react'
 import { businessApi } from '@/api/business'
 import { bookingsApi } from '@/api/bookings'
 import { getBusinessConfig } from '@/lib/businessIcons'
@@ -50,8 +52,39 @@ function countdown(fromMs: number, toIso: string): string {
   return `${dayLabel(toLocalIsoDate(new Date(toIso))).toLowerCase()} a las ${formatTime(toIso)}`
 }
 
+/** Se puede marcar la llegada desde 2 h antes hasta el final de la cita, si sigue activa. */
+const canMarkArrival = (b: Booking, now: number) =>
+  (b.status === 'Pending' || b.status === 'Confirmed') && !b.arrivedAt &&
+  now >= new Date(b.startTime).getTime() - 2 * 3600_000 && now < new Date(b.endTime).getTime()
+
+function ArrivalControl({ booking, now, onArrive, pending }: {
+  booking: Booking
+  now: number
+  onArrive: (id: string) => void
+  pending: boolean
+}) {
+  if (booking.arrivedAt)
+    return (
+      <span className="flex items-center gap-1 rounded-full bg-emerald-500/15 px-2.5 py-1 text-[11px] font-medium text-emerald-300">
+        <DoorOpen size={12} /> Llegó a las {formatTime(booking.arrivedAt)}
+      </span>
+    )
+  if (!canMarkArrival(booking, now)) return null
+  return (
+    <button
+      onClick={() => onArrive(booking.id)}
+      disabled={pending}
+      className="arrive-btn flex h-8 items-center gap-1.5 rounded-xl px-3 text-xs font-semibold text-white disabled:opacity-60"
+    >
+      <DoorOpen size={13} /> {pending ? 'Marcando…' : 'Ha llegado'}
+    </button>
+  )
+}
+
 /** Tarjeta "Ahora": la cita en curso con su progreso, o la próxima con cuenta atrás. */
-function NowCard({ current, next, now }: { current?: Booking; next?: Booking; now: number }) {
+function NowCard({ current, next, now, onArrive, arriving }: {
+  current?: Booking; next?: Booking; now: number; onArrive: (id: string) => void; arriving: string | null
+}) {
   const b = current ?? next
   if (!b) {
     return (
@@ -82,7 +115,14 @@ function NowCard({ current, next, now }: { current?: Booking; next?: Booking; no
                 ? <><span className="live-dot" aria-hidden /> <span className="text-emerald-300">En curso</span></>
                 : <span className="text-violet-300">Próxima cita</span>}
             </p>
-            <p className="mt-1 truncate text-xl font-semibold tracking-tight text-white sm:text-2xl">{b.clientName}</p>
+            <p className="mt-1 flex flex-wrap items-center gap-2 text-xl font-semibold tracking-tight text-white sm:text-2xl">
+              <span className="truncate">{b.clientName}</span>
+              {b.clientFlagged && (
+                <span className="flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium tracking-normal text-amber-300">
+                  <AlertTriangle size={11} /> Cliente con aviso
+                </span>
+              )}
+            </p>
             <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-slate-400">
               <span>{b.serviceName}</span>
               <span className="flex items-center gap-1"><User size={12} /> {b.staffName}</span>
@@ -90,7 +130,8 @@ function NowCard({ current, next, now }: { current?: Booking; next?: Booking; no
             </p>
           </div>
         </div>
-        <div className="sm:text-right">
+        <div className="flex flex-col gap-2 sm:items-end sm:text-right">
+          <ArrivalControl booking={b} now={now} onArrive={onArrive} pending={arriving === b.id} />
           <p className="text-2xl font-semibold tracking-tight text-white sm:text-3xl" aria-live="polite">
             {current ? `${leftMin} min` : countdown(now, b.startTime).replace('dentro de ', '')}
           </p>
@@ -122,6 +163,20 @@ export function AgendaPage() {
     const id = window.setInterval(() => setNow(Date.now()), CLOCK_TICK_MS)
     return () => window.clearInterval(id)
   }, [])
+
+  const queryClient = useQueryClient()
+  const arrive = useMutation({
+    mutationFn: (id: string) => bookingsApi.markArrived(id),
+    onSuccess: (b) => {
+      queryClient.invalidateQueries({ queryKey: ['agenda'] })
+      queryClient.invalidateQueries({ queryKey: ['business-bookings'] })
+      queryClient.invalidateQueries({ queryKey: ['calendar-bookings'] })
+      toast.success(`${b.clientName} ha llegado`)
+    },
+    onError: (err) => toast.error(
+      (isAxiosError<{ message?: string }>(err) && err.response?.data?.message) || 'No se pudo marcar la llegada.'),
+  })
+  const arriving = arrive.isPending ? (arrive.variables ?? null) : null
 
   const { data: businesses, isLoading: bizLoading } = useQuery({
     queryKey: ['businesses'],
@@ -167,7 +222,7 @@ export function AgendaPage() {
     return [...map.entries()]
   }, [filtered])
 
-  const active = (bookings ?? []).filter(b => b.status !== 'Cancelled')
+  const active = (bookings ?? []).filter(b => b.status !== 'Cancelled' && b.status !== 'NoShow')
   const current = active.find(b => new Date(b.startTime).getTime() <= now && now < new Date(b.endTime).getTime())
   const nextBooking = active
     .filter(b => new Date(b.startTime).getTime() > now)
@@ -229,7 +284,7 @@ export function AgendaPage() {
       )}
 
       {/* Ahora: cita en curso o la siguiente */}
-      {isLoading ? <div className="skeleton h-32 !rounded-3xl" /> : <NowCard current={current} next={nextBooking} now={now} />}
+      {isLoading ? <div className="skeleton h-32 !rounded-3xl" /> : <NowCard current={current} next={nextBooking} now={now} onArrive={id => arrive.mutate(id)} arriving={arriving} />}
 
       {/* Resumen del periodo */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -317,7 +372,7 @@ export function AgendaPage() {
                     <li
                       key={b.id}
                       style={{ '--i': i, '--c': color } as React.CSSProperties}
-                      className={cn('list-in relative grid grid-cols-[3.5rem_1fr] gap-4 sm:grid-cols-[4.5rem_1fr]', (past || b.status === 'Cancelled') && 'is-past')}
+                      className={cn('list-in relative grid grid-cols-[3.5rem_1fr] gap-4 sm:grid-cols-[4.5rem_1fr]', (past || b.status === 'Cancelled' || b.status === 'NoShow') && 'is-past')}
                     >
                       <div className="pt-3 text-right">
                         <p className="text-sm font-semibold text-white tabular-nums">{formatTime(b.startTime)}</p>
@@ -330,15 +385,26 @@ export function AgendaPage() {
                           live ? 'border-emerald-500/35' : isNext ? 'border-violet-500/35' : 'border-white/[0.07]'
                         )}>
                           <div className="min-w-0 flex-1">
-                            <p className="truncate font-medium text-white">{b.clientName}</p>
+                            <p className="flex flex-wrap items-center gap-2 font-medium text-white">
+                              <span className="truncate">{b.clientName}</span>
+                              {b.clientFlagged && (
+                                <span className="flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-300" title="No se presentó a alguna cita anterior">
+                                  <AlertTriangle size={11} /> Cliente con aviso
+                                </span>
+                              )}
+                            </p>
                             <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-400">
                               <span>{b.serviceName}</span>
                               <span className="flex items-center gap-1"><User size={11} /> {b.staffName}</span>
+                              {b.extras.length > 0 && (
+                                <span className="flex items-center gap-1 text-violet-300"><Sparkles size={11} /> {b.extras.map(e => e.name).join(' · ')}</span>
+                              )}
                               {b.notes && <span className="truncate">📝 {b.notes}</span>}
                             </p>
                           </div>
                           <div className="flex items-center gap-3 sm:justify-end">
-                            {live && <span className="text-[11px] font-medium text-emerald-300">En curso</span>}
+                            <ArrivalControl booking={b} now={now} onArrive={id => arrive.mutate(id)} pending={arriving === b.id} />
+                            {live && !b.arrivedAt && <span className="text-[11px] font-medium text-emerald-300">En curso</span>}
                             {!live && isNext && <span className="text-[11px] font-medium text-violet-300">{countdown(now, b.startTime)}</span>}
                             <span className="text-sm font-medium text-white tabular-nums">{formatPrice(b.price)}</span>
                             <StatusBadge status={b.status} />

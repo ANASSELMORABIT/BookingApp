@@ -6,12 +6,12 @@ import { useAuth } from '@/context/AuthContext'
 /** Datos que cambian cuando se crea o cancela una reserva: se recargan al recibir la notificación. */
 const BOOKING_QUERY_KEYS = [
   ['calendar-bookings'], ['agenda'], ['business-bookings'], ['my-bookings'],
-  ['dashboard'], ['bookings-period'], ['staff-stats'], ['availability'],
+  ['dashboard'], ['bookings-period'], ['staff-stats'], ['availability'], ['clients'],
 ]
 
 export interface Notification {
   id: string
-  type: 'booking_created' | 'booking_cancelled' | 'booking_confirmed'
+  type: 'booking_created' | 'booking_cancelled' | 'booking_confirmed' | 'booking_alert'
   title: string
   message: string
   time: string
@@ -46,6 +46,7 @@ export function useNotifications() {
     conn.on('BookingCreated', addNotification)
     conn.on('BookingCancelled', addNotification)
     conn.on('BookingConfirmed', addNotification)
+    conn.on('BookingAlert', addNotification)
 
     conn.start().catch(err => console.warn('No se pudo conectar a las notificaciones', err))
 

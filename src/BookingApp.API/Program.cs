@@ -62,4 +62,10 @@ RecurringJob.AddOrUpdate<BookingReminderJob>(
     job => job.SendRemindersAsync(),
     Cron.Hourly);
 
+// Cancela como "no presentado" las reservas sin llegada pasada la tolerancia del negocio
+RecurringJob.AddOrUpdate<LateBookingJob>(
+    "late-bookings",
+    job => job.CancelLateBookingsAsync(),
+    Cron.Minutely);
+
 app.Run();

@@ -54,4 +54,18 @@ public class NotificationService : INotificationService
             await _hub.SendToTenantAsync(tenantId.ToString(), "BookingConfirmed", data);
             await _hub.SendToTenantAsync("superadmin", "BookingConfirmed", data);
         }
+
+    public async Task SendAlertAsync(Guid tenantId, string title, string message)
+    {
+        var data = new
+        {
+            type    = "booking_alert",
+            title,
+            message,
+            time    = DateTime.UtcNow
+        };
+
+        await _hub.SendToTenantAsync(tenantId.ToString(), "BookingAlert", data);
+        await _hub.SendToTenantAsync("superadmin", "BookingAlert", data);
+    }
 }

@@ -23,7 +23,12 @@ API REST en **ASP.NET Core (.NET 10)** con **EF Core + PostgreSQL**, y SPA en **
 - **Gestión de negocios, empleados y servicios** (CRUD) desde el panel de administración.
 - **Motor de disponibilidad**: genera los huecos del día según el horario del negocio y la duración del servicio, marca como ocupados los que se solapan con reservas existentes del empleado y convierte entre UTC y la zona horaria del negocio (`Europe/Madrid`).
 - **Validación de reservas** común a la reserva autenticada y a la pública: empleado del mismo negocio, dentro del horario, no en el pasado y sin solapamientos con otras reservas del empleado.
-- **Página pública de reserva** (`/book/:slug`) en cuatro pasos: servicio y empleado → fecha y hora → datos personales → confirmación.
+- **Página pública de reserva** (`/book/:slug`) en cuatro pasos: servicio, extras y empleado → fecha y hora → datos personales → confirmación con factura y normas.
+- **Extras de pago por servicio** (p. ej. Skin care 50 € + mascarilla 10 €): cada extra tiene precio y, opcionalmente, minutos que alargan la cita. El cliente los elige al reservar, la disponibilidad se calcula con la duración total y antes de confirmar ve la factura desglosada (servicio + extras = total). La reserva guarda una copia de cada extra, así que cambiar o borrar un extra no altera las reservas hechas.
+- **Normas del negocio**, configurables en Negocios → Normas: sin acompañantes, cancelación automática por retraso (margen de 5–60 min, 10 por defecto), bloqueo por cancelar sin aviso (1–168 h, 24 por defecto) y una norma en texto libre. El cliente las ve al reservar y debe aceptarlas.
+- **Llegada y no presentados**: el negocio marca «Ha llegado» en la Agenda. Un job de Hangfire, cada minuto, cancela como *no presentado* las reservas sin llegada pasado el margen y pone al cliente en la **lista de avisos**: puede volver a reservar, pero el negocio recibe una alerta en tiempo real y la reserva aparece marcada como «Cliente con aviso».
+- **Bloqueo por cancelar sin aviso**: si un cliente cancela con menos antelación de la exigida, queda bloqueado y no puede reservar (ni con cuenta ni desde la página pública) hasta que el negocio lo desbloquee. Antes de cancelar se le advierte.
+- **Clientes** (`/clients`): historial de cada cliente (reservas, no presentados, cancelaciones, última reserva), filtros por «con aviso» y «bloqueados», y acciones para bloquear, desbloquear o quitar el aviso.
 - **Página de inicio con escena 3D** (`/`): presentación del producto con una escena WebGL (React Three Fiber) ligada al scroll, en la que las citas pasan "del caos al orden", y secciones de público, funciones y pasos. La escena se descarga aparte y solo en escritorio; en móvil, con "reducir movimiento" o sin WebGL se muestra una versión estática.
 - **Agenda** (`/agenda`): tarjeta "Ahora" con la cita en curso (y su progreso) o la próxima con cuenta atrás, y las reservas de hoy, 7 o 30 días como línea de tiempo por día, con resumen (pendientes, confirmadas, ingresos previstos) y filtros por estado, empleado y búsqueda.
 - **Reservas** (`/bookings`): para el negocio, pestaña "Del negocio" con todas las reservas de sus clientes (incluidas las de la página pública), próximas y anteriores, y pestaña "Mías"; búsqueda por cliente, servicio o persona, y asistente de nueva reserva en tres pasos.
@@ -110,6 +115,7 @@ src/Booking.Frontend/src/
 | `/business` · `/services` | Negocios, equipo y servicios | Owner (servicios también Staff) |
 | `/stats` | Horizonte 3D, gráficas y exportación | Owner |
 | `/share` | Enlace público de reservas | Owner |
+| `/clients` | Clientes, lista de avisos y bloqueos | Owner |
 | `/profile` | Perfil, contraseña y sesión | Todos |
 
 ---
@@ -187,7 +193,11 @@ La base de datos arranca vacía. Regístrate desde `/register` indicando un iden
 | POST | `/api/Bookings` | JWT | Crear reserva |
 | GET | `/api/Bookings/my` | JWT | Mis reservas |
 | GET | `/api/Bookings/business/{id}?from=&to=` | Owner, Staff | Reservas del negocio en un rango |
-| DELETE | `/api/Bookings/{id}` | JWT | Cancelar reserva |
+| DELETE | `/api/Bookings/{id}` | JWT | Cancelar reserva (bloquea si es sin el aviso mínimo) |
+| PUT | `/api/Bookings/{id}/arrived` | Owner, Staff | Marcar que el cliente ha llegado |
+| PUT | `/api/Business/{id}/policies` | Owner | Normas del negocio |
+| POST / PUT / DELETE | `/api/Business/services/{id}/extras` · `/api/Business/extras/{id}` | Owner, Staff | Extras de un servicio |
+| GET / PUT | `/api/Clients` · `/{id}/block` · `/{id}/unblock` · `/{id}/clear-flag` | Owner | Clientes, avisos y bloqueos |
 | GET | `/api/Admin/dashboard` | Owner, Staff | Estadísticas |
 | GET | `/api/Export/excel` · `/api/Export/pdf` | Owner | Exportaciones |
 | GET | `/api/public/business/{slug}` | Público | Datos públicos del negocio |
@@ -203,12 +213,14 @@ La base de datos arranca vacía. Regístrate desde `/register` indicando un iden
 dotnet test
 ```
 
-31 tests (xUnit) que se ejecutan también en GitHub Actions en cada push:
+47 tests (xUnit) que se ejecutan también en GitHub Actions en cada push:
 
 - **Dominio**: solapamiento entre reservas y cambio de estado.
 - **Reservas** (EF Core InMemory): conversión hora local ↔ UTC, solapamientos, reservas consecutivas, horario del negocio, fechas pasadas, reserva pública y aislamiento entre tenants.
 - **Disponibilidad**: huecos de toda la jornada (incluido el último), huecos ocupados y empleados de otro negocio.
 - **Flujo de la reserva pública**: una reserva bloquea la franja solo para el empleado elegido (también para servicios de otra duración), repetir la misma hora se rechaza mientras otro empleado puede tomarla, y el negocio ve la reserva en su lista.
+- **Extras y normas**: total y duración con extras, extras de otro servicio o inactivos rechazados, horas libres con la duración total, extras que pasan del cierre, normas obligatorias de aceptar, validación y aislamiento de las normas por negocio.
+- **Retrasos y bloqueos**: el job cancela como no presentado solo pasado el margen (no si el cliente llegó o la norma está desactivada) y pone al cliente en la lista de avisos; cancelar sin aviso bloquea al cliente (no al equipo), un bloqueado no puede reservar y vuelve a poder tras desbloquearlo; marcar la llegada y listar clientes solo dentro del propio negocio.
 - **Registro y login**: slugs reservados o inválidos, imposibilidad de unirse a un tenant existente y mensajes de error que no revelan qué datos existen.
 
 El workflow de CI compila y prueba el backend y ejecuta lint y build del frontend.
@@ -227,6 +239,7 @@ El workflow de CI compila y prueba el backend y ejecuta lint y build del fronten
 - Restricción de exclusión en PostgreSQL para impedir reservas solapadas en peticiones concurrentes.
 - Filtros globales de EF Core por tenant.
 - Endpoints para que el negocio confirme, complete o cancele las reservas de sus clientes (hoy solo puede cancelar quien hizo la reserva), y sus botones en la Agenda.
+- Enlace de cancelación para los clientes de la página pública, que no tienen cuenta (hoy la regla de «cancelar sin aviso» solo se aplica a clientes con cuenta).
 - Filtro por negocio en `/api/Admin/bookings-by-period` (la gráfica "Reservas por día" muestra siempre todos los negocios).
 
 ---

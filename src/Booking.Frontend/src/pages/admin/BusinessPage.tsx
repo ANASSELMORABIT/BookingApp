@@ -16,6 +16,8 @@ import { PageLoader } from '@/components/app/PageLoader'
 import { EmptyState } from '@/components/app/EmptyState'
 import { Segmented } from '@/components/app/Segmented'
 import { Switch } from '@/components/app/Switch'
+import { PoliciesForm } from '@/components/booking/PoliciesForm'
+import { ShieldCheck } from 'lucide-react'
 
 /** "09:00:00" → minutos desde medianoche */
 const toMinutes = (t: string) => {
@@ -82,7 +84,7 @@ export function BusinessPage() {
   const [showStaffModal, setShowStaffModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showServiceModal, setShowServiceModal] = useState(false)
-  const [activeTab, setActiveTab] = useState<'services' | 'staff'>('services')
+  const [activeTab, setActiveTab] = useState<'services' | 'staff' | 'policies'>('services')
 
   const [newBusiness, setNewBusiness] = useState({
     name: '', category: '', phone: '', address: '',
@@ -327,6 +329,7 @@ export function BusinessPage() {
                 options={[
                   { id: 'services', label: 'Servicios', icon: Scissors, count: services?.length },
                   { id: 'staff', label: 'Equipo', icon: Users, count: staff?.length },
+                  { id: 'policies', label: 'Normas', icon: ShieldCheck },
                 ]}
               />
 
@@ -357,6 +360,17 @@ export function BusinessPage() {
                       <p className="text-slate-500 text-sm text-center py-6">Sin servicios todavía</p>
                     )}
                   </div>
+                </div>
+              )}
+
+              {/* Normas */}
+              {activeTab === 'policies' && (
+                <div className="profile-panel glass-panel p-5">
+                  <div className="mb-4">
+                    <h3 className="text-white font-semibold text-sm">Normas del negocio</h3>
+                    <p className="mt-0.5 text-xs text-slate-400">El cliente las ve y debe aceptarlas al reservar.</p>
+                  </div>
+                  <PoliciesForm key={selectedBusiness.id} business={selectedBusiness} />
                 </div>
               )}
 

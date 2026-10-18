@@ -13,6 +13,7 @@ public class Service : BaseEntity
 
     public Business Business { get; private set; } = null!;
     public ICollection<Booking> Bookings { get; private set; } = new List<Booking>();
+    public ICollection<ServiceExtra> Extras { get; private set; } = new List<ServiceExtra>();
 
     protected Service() { }
 

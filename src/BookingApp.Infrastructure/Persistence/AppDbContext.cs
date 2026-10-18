@@ -13,6 +13,8 @@ public class AppDbContext : DbContext
     public DbSet<Staff> Staff => Set<Staff>();
     public DbSet<Booking> Bookings => Set<Booking>();
     public DbSet<AppUser> Users => Set<AppUser>();
+    public DbSet<ServiceExtra> ServiceExtras => Set<ServiceExtra>();
+    public DbSet<BookingExtra> BookingExtras => Set<BookingExtra>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

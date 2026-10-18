@@ -18,6 +18,11 @@ import { StatusBadge } from '@/components/app/StatusBadge'
 import { ConfirmDialog } from '@/components/app/ConfirmDialog'
 import { formatPrice, formatTime, toLocalIsoDate } from '@/lib/labels'
 import { useAuth } from '@/context/AuthContext'
+import { ExtrasPicker } from '@/components/booking/ExtrasPicker'
+import { PriceSummary } from '@/components/booking/PriceSummary'
+import { PoliciesNotice } from '@/components/booking/PoliciesNotice'
+import { hasPolicies } from '@/lib/policies'
+import { AlertTriangle, DoorOpen, Sparkles } from 'lucide-react'
 import type { Booking, TimeSlot } from '@/types'
 
 const apiMessage = (err: unknown, fallback: string) =>
@@ -34,6 +39,8 @@ export function BookingsPage() {
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null)
   const [notes, setNotes] = useState('')
   const [cancelTarget, setCancelTarget] = useState<Booking | null>(null)
+  const [selectedExtraIds, setSelectedExtraIds] = useState<string[]>([])
+  const [acceptPolicies, setAcceptPolicies] = useState(false)
 
   const { data: myBookings, isLoading } = useQuery({
     queryKey: ['my-bookings'],
@@ -60,8 +67,8 @@ export function BookingsPage() {
   })
 
   const { data: slots } = useQuery({
-    queryKey: ['availability', selectedServiceId, selectedStaffId, selectedDate],
-    queryFn: () => bookingsApi.getAvailability(selectedServiceId, selectedStaffId, selectedDate),
+    queryKey: ['availability', selectedServiceId, selectedStaffId, selectedDate, selectedExtraIds.join(',')],
+    queryFn: () => bookingsApi.getAvailability(selectedServiceId, selectedStaffId, selectedDate, selectedExtraIds),
     enabled: !!selectedServiceId && !!selectedStaffId && !!selectedDate,
     // La disponibilidad cambia con cada reserva: nunca se reutiliza una copia antigua
     staleTime: 0,
@@ -75,6 +82,8 @@ export function BookingsPage() {
         staffId: selectedStaffId,
         startTime: selectedSlot!.startTime,
         notes: notes || undefined,
+        extraIds: selectedExtraIds,
+        acceptPolicies,
       }),
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ['my-bookings'] })
@@ -91,6 +100,8 @@ export function BookingsPage() {
         setSelectedDate('')
         setSelectedSlot(null)
         setNotes('')
+        setSelectedExtraIds([])
+        setAcceptPolicies(false)
         toast.success('Reserva creada')
       },
       onError: (err) => toast.error(apiMessage(err, 'No se pudo crear la reserva. Inténtalo de nuevo.')),
@@ -133,6 +144,8 @@ export function BookingsPage() {
   if (isLoading || (view === 'business' && businessLoading)) return <PageLoader label="Cargando reservas…" cards={0} />
 
   const nowIso = new Date().toISOString()
+  const selectedService = services?.find(s => s.id === selectedServiceId)
+  const chosenExtras = selectedService?.extras.filter(e => selectedExtraIds.includes(e.id)) ?? []
   const todayKey = toLocalIsoDate(new Date())
   const all = view === 'business' ? (businessBookings ?? []) : (myBookings ?? [])
   const q = search.trim().toLowerCase()
@@ -203,7 +216,7 @@ export function BookingsPage() {
           <div
             key={b.id}
             style={{ '--i': i } as React.CSSProperties}
-            className={`list-in lift-card bg-white/[0.03] border border-white/10 rounded-2xl p-4 sm:p-5 hover:border-white/20 hover:bg-white/[0.045] ${b.status === 'Cancelled' ? 'opacity-60' : ''}`}
+            className={`list-in lift-card bg-white/[0.03] border border-white/10 rounded-2xl p-4 sm:p-5 hover:border-white/20 hover:bg-white/[0.045] ${b.status === 'Cancelled' || b.status === 'NoShow' ? 'opacity-60' : ''}`}
           >
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-4 min-w-0">
@@ -211,7 +224,19 @@ export function BookingsPage() {
                 <div className="min-w-0">
                   <p className="text-white font-semibold truncate">{b.serviceName}</p>
                   {view === 'business' && (
-                    <p className="text-slate-300 text-sm truncate">{b.clientName}</p>
+                    <p className="flex flex-wrap items-center gap-2 text-slate-300 text-sm">
+                      <span className="truncate">{b.clientName}</span>
+                      {b.clientFlagged && (
+                        <span className="flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-300" title="No se presentó a alguna cita anterior">
+                          <AlertTriangle size={11} /> Cliente con aviso
+                        </span>
+                      )}
+                      {b.arrivedAt && (
+                        <span className="flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-medium text-emerald-300">
+                          <DoorOpen size={11} /> Llegó a las {formatTime(b.arrivedAt)}
+                        </span>
+                      )}
+                    </p>
                   )}
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
                     <span className="flex items-center gap-1 text-slate-400 text-xs tabular-nums">
@@ -220,6 +245,11 @@ export function BookingsPage() {
                     <span className="flex items-center gap-1 text-slate-400 text-xs">
                       <User size={11} /> {b.staffName}
                     </span>
+                    {b.extras.length > 0 && (
+                      <span className="flex items-center gap-1 text-violet-300 text-xs" title={b.extras.map(e => `${e.name} (+${formatPrice(e.price)})`).join(', ')}>
+                        <Sparkles size={11} /> {b.extras.map(e => e.name).join(' · ')}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -281,7 +311,10 @@ export function BookingsPage() {
         onOpenChange={open => { if (!open) setCancelTarget(null) }}
         title="¿Cancelar esta reserva?"
         description={cancelTarget
-          ? `${cancelTarget.serviceName} con ${cancelTarget.staffName}, el ${new Date(cancelTarget.startTime).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}. Esta acción no se puede deshacer.`
+          ? `${cancelTarget.serviceName} con ${cancelTarget.staffName}, el ${new Date(cancelTarget.startTime).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}. ` +
+            (cancelTarget.freeCancellationUntil && new Date(cancelTarget.freeCancellationUntil) < new Date() && user?.role === 'Client'
+              ? 'Atención: ya ha pasado el plazo para cancelar sin aviso. Si cancelas ahora, no podrás volver a reservar en este negocio.'
+              : 'Esta acción no se puede deshacer.')
           : ''}
         confirmLabel="Sí, cancelar"
         loading={cancelMutation.isPending}
@@ -324,7 +357,7 @@ export function BookingsPage() {
                   {services?.filter(s => s.isActive).map(s => (
                     <button
                       key={s.id}
-                      onClick={() => setSelectedServiceId(s.id)}
+                      onClick={() => { if (selectedServiceId !== s.id) { setSelectedExtraIds([]); setSelectedSlot(null) } setSelectedServiceId(s.id) }}
                       className={`p-3 rounded-xl border text-left transition-all ${
                         selectedServiceId === s.id
                           ? 'bg-violet-600/20 border-violet-500/40 '
@@ -339,6 +372,13 @@ export function BookingsPage() {
                   ))}
                 </div>
               </div>
+              {selectedService && selectedService.extras.some(e => e.isActive) && (
+                <ExtrasPicker
+                  extras={selectedService.extras.filter(e => e.isActive)}
+                  selected={selectedExtraIds}
+                  onChange={ids => { setSelectedExtraIds(ids); setSelectedSlot(null) }}
+                />
+              )}
               <div className="space-y-2">
                 <Label className="text-slate-300 text-sm">Staff</Label>
                 <div className="grid grid-cols-2 gap-2">
@@ -458,7 +498,6 @@ export function BookingsPage() {
                   { label: 'Staff', value: staff?.find(s => s.id === selectedStaffId)?.name },
                   { label: 'Fecha', value: new Date(`${selectedDate}T00:00`).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }) },
                   { label: 'Hora', value: new Date(selectedSlot!.startTime).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) },
-                  { label: 'Precio', value: `${services?.find(s => s.id === selectedServiceId)?.price.toFixed(2)}€` },
                 ].map(item => (
                   <div key={item.label} className="flex justify-between text-sm">
                     <span className="text-slate-500">{item.label}</span>
@@ -466,6 +505,17 @@ export function BookingsPage() {
                   </div>
                 ))}
               </div>
+              {selectedService && (
+                <PriceSummary
+                  serviceName={selectedService.name}
+                  servicePrice={selectedService.price}
+                  serviceMinutes={selectedService.durationMinutes}
+                  extras={chosenExtras}
+                />
+              )}
+              {firstBusiness && (
+                <PoliciesNotice policies={firstBusiness.policies} accepted={acceptPolicies} onAcceptedChange={setAcceptPolicies} />
+              )}
               <div className="space-y-1.5">
                 <Label className="text-slate-300 text-sm">Notas (opcional)</Label>
                 <Input
@@ -482,7 +532,7 @@ export function BookingsPage() {
                 </Button>
                 <Button
                   onClick={() => createMutation.mutate()}
-                  disabled={createMutation.isPending}
+                  disabled={createMutation.isPending || (hasPolicies(firstBusiness?.policies) && !acceptPolicies)}
                   className="bg-violet-600 hover:bg-violet-500 text-white rounded-xl h-10 shadow-lg shadow-violet-600/20"
                 >
                   {createMutation.isPending ? 'Reservando...' : '✓ Confirmar reserva'}

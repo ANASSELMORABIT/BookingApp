@@ -206,4 +206,81 @@ public class BusinessController : ControllerBase
             return Forbid();
         }
     }
+
+    // ---------- Normas del negocio ----------
+
+    [HttpPut("{id}/policies")]
+    [Authorize(Policy = "OwnerOnly")]
+    public async Task<IActionResult> UpdatePolicies(Guid id, BusinessPoliciesDto dto)
+    {
+        try
+        {
+            return Ok(await _businessService.UpdatePoliciesAsync(id, dto, TenantId, Role));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
+    }
+
+    // ---------- Extras de un servicio ----------
+
+    [HttpPost("services/{serviceId}/extras")]
+    [Authorize(Policy = "OwnerOrStaff")]
+    public async Task<IActionResult> AddExtra(Guid serviceId, SaveServiceExtraDto dto)
+    {
+        try
+        {
+            return Ok(await _businessService.AddExtraAsync(serviceId, dto, TenantId, Role));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
+    }
+
+    [HttpPut("extras/{extraId}")]
+    [Authorize(Policy = "OwnerOrStaff")]
+    public async Task<IActionResult> UpdateExtra(Guid extraId, SaveServiceExtraDto dto)
+    {
+        try
+        {
+            return Ok(await _businessService.UpdateExtraAsync(extraId, dto, TenantId, Role));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
+    }
+
+    [HttpDelete("extras/{extraId}")]
+    [Authorize(Policy = "OwnerOnly")]
+    public async Task<IActionResult> DeleteExtra(Guid extraId)
+    {
+        try
+        {
+            await _businessService.DeleteExtraAsync(extraId, TenantId, Role);
+            return Ok(new { message = "Extra eliminado." });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
+    }
 }

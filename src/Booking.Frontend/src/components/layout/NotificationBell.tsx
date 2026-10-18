@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { Bell, X, CheckCheck, Calendar, XCircle, CheckCircle } from 'lucide-react'
+import { Bell, X, CheckCheck, Calendar, XCircle, CheckCircle, AlertTriangle } from 'lucide-react'
 import { useNotifications } from '@/hooks/useNotifications'
 import { cn } from '@/lib/utils'
 
@@ -14,6 +14,7 @@ export function NotificationBell() {
     booking_created:   { icon: Calendar,    color: 'text-violet-400',  bg: 'bg-violet-500/10'  },
     booking_cancelled: { icon: XCircle,     color: 'text-rose-400',    bg: 'bg-rose-500/10'    },
     booking_confirmed: { icon: CheckCircle, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+    booking_alert:     { icon: AlertTriangle, color: 'text-amber-300', bg: 'bg-amber-500/10' },
   }
 
   // Calcula la posición del panel en base a la posición real del botón en el viewport

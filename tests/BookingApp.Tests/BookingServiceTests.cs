@@ -9,7 +9,8 @@ public class BookingServiceTests
     {
         ServiceId = d.ServiceA.Id,
         StaffId   = d.StaffA.Id,
-        StartTime = localStart
+        StartTime = localStart,
+        AcceptPolicies = true
     };
 
     [Fact]
@@ -54,7 +55,7 @@ public class BookingServiceTests
     public async Task Create_Throws_WhenServiceBelongsToAnotherTenant()
     {
         var d = new TestData();
-        var dto = new CreateBookingDto { ServiceId = d.ServiceB.Id, StaffId = d.StaffB.Id, StartTime = d.Local(10) };
+        var dto = new CreateBookingDto { ServiceId = d.ServiceB.Id, StaffId = d.StaffB.Id, StartTime = d.Local(10), AcceptPolicies = true };
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             d.BookingService().CreateAsync(dto, d.OwnerA.Id, d.TenantA.Id, "Owner"));
@@ -64,7 +65,7 @@ public class BookingServiceTests
     public async Task Create_Throws_WhenStaffBelongsToAnotherBusiness()
     {
         var d = new TestData();
-        var dto = new CreateBookingDto { ServiceId = d.ServiceA.Id, StaffId = d.StaffB.Id, StartTime = d.Local(10) };
+        var dto = new CreateBookingDto { ServiceId = d.ServiceA.Id, StaffId = d.StaffB.Id, StartTime = d.Local(10), AcceptPolicies = true };
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             d.BookingService().CreateAsync(dto, d.OwnerA.Id, d.TenantA.Id, "Owner"));
@@ -103,7 +104,8 @@ public class BookingServiceTests
             StaffId   = d.StaffA.Id,
             StartTime = local,
             FullName  = "Cliente Invitado",
-            Email     = "Invitado@Mail.com"
+            Email     = "Invitado@Mail.com",
+            AcceptPolicies = true
         });
 
         Assert.Equal(TimeZoneInfo.ConvertTimeToUtc(local, BusinessTime.Zone), result.StartTime);
@@ -143,7 +145,8 @@ public class BookingServiceTests
         await service.CreateAsync(new CreateBookingDto
         {
             ServiceId = d.ServiceA.Id, StaffId = d.StaffA.Id,
-            StartTime = d.Day.AddDays(2).ToDateTime(new TimeOnly(10, 0))
+            StartTime = d.Day.AddDays(2).ToDateTime(new TimeOnly(10, 0)),
+            AcceptPolicies = true
         }, d.OwnerA.Id, d.TenantA.Id, "Owner");
 
         var bookings = await service.GetByBusinessAsync(d.BusinessA.Id, d.Day, d.Day.AddDays(2), d.TenantA.Id, "Owner");

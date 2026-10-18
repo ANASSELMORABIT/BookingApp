@@ -28,6 +28,13 @@ namespace BookingApp.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateTime?>("BlockedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("BlockedReason")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -40,6 +47,15 @@ namespace BookingApp.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("IsBlocked")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsFlagged")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("NoShowCount")
+                        .HasColumnType("integer");
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()
@@ -73,6 +89,15 @@ namespace BookingApp.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateTime?>("ArrivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("ClientFlagged")
+                        .HasColumnType("boolean");
+
                     b.Property<Guid>("ClientId")
                         .HasColumnType("uuid");
 
@@ -103,6 +128,10 @@ namespace BookingApp.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<decimal>("TotalPrice")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -117,6 +146,45 @@ namespace BookingApp.Infrastructure.Migrations
                     b.ToTable("Bookings");
                 });
 
+            modelBuilder.Entity("BookingApp.Domain.Entities.BookingExtra", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("BookingId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("ExtraMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<decimal>("Price")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<Guid?>("ServiceExtraId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BookingId");
+
+                    b.HasIndex("ServiceExtraId");
+
+                    b.ToTable("BookingExtras");
+                });
+
             modelBuilder.Entity("BookingApp.Domain.Entities.Business", b =>
                 {
                     b.Property<Guid>("Id")
@@ -125,6 +193,15 @@ namespace BookingApp.Infrastructure.Migrations
 
                     b.Property<string>("Address")
                         .HasColumnType("text");
+
+                    b.Property<bool>("AutoCancelLate")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("BlockLateCancellations")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("CancellationNoticeHours")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Category")
                         .IsRequired()
@@ -137,10 +214,20 @@ namespace BookingApp.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("ExtraPolicy")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("LateToleranceMinutes")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("NoCompanionsPolicy")
+                        .HasColumnType("boolean");
 
                     b.Property<TimeOnly>("OpenTime")
                         .HasColumnType("time without time zone");
@@ -199,6 +286,43 @@ namespace BookingApp.Infrastructure.Migrations
                     b.HasIndex("BusinessId");
 
                     b.ToTable("Services");
+                });
+
+            modelBuilder.Entity("BookingApp.Domain.Entities.ServiceExtra", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("ExtraMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<decimal>("Price")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<Guid>("ServiceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ServiceId");
+
+                    b.ToTable("ServiceExtras");
                 });
 
             modelBuilder.Entity("BookingApp.Domain.Entities.Staff", b =>
@@ -310,6 +434,20 @@ namespace BookingApp.Infrastructure.Migrations
                     b.Navigation("Staff");
                 });
 
+            modelBuilder.Entity("BookingApp.Domain.Entities.BookingExtra", b =>
+                {
+                    b.HasOne("BookingApp.Domain.Entities.Booking", null)
+                        .WithMany("Extras")
+                        .HasForeignKey("BookingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("BookingApp.Domain.Entities.ServiceExtra", null)
+                        .WithMany()
+                        .HasForeignKey("ServiceExtraId")
+                        .OnDelete(DeleteBehavior.SetNull);
+                });
+
             modelBuilder.Entity("BookingApp.Domain.Entities.Business", b =>
                 {
                     b.HasOne("BookingApp.Domain.Entities.Tenant", "Tenant")
@@ -332,6 +470,17 @@ namespace BookingApp.Infrastructure.Migrations
                     b.Navigation("Business");
                 });
 
+            modelBuilder.Entity("BookingApp.Domain.Entities.ServiceExtra", b =>
+                {
+                    b.HasOne("BookingApp.Domain.Entities.Service", "Service")
+                        .WithMany("Extras")
+                        .HasForeignKey("ServiceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Service");
+                });
+
             modelBuilder.Entity("BookingApp.Domain.Entities.Staff", b =>
                 {
                     b.HasOne("BookingApp.Domain.Entities.Business", "Business")
@@ -348,6 +497,11 @@ namespace BookingApp.Infrastructure.Migrations
                     b.Navigation("Bookings");
                 });
 
+            modelBuilder.Entity("BookingApp.Domain.Entities.Booking", b =>
+                {
+                    b.Navigation("Extras");
+                });
+
             modelBuilder.Entity("BookingApp.Domain.Entities.Business", b =>
                 {
                     b.Navigation("Services");
@@ -358,6 +512,8 @@ namespace BookingApp.Infrastructure.Migrations
             modelBuilder.Entity("BookingApp.Domain.Entities.Service", b =>
                 {
                     b.Navigation("Bookings");
+
+                    b.Navigation("Extras");
                 });
 
             modelBuilder.Entity("BookingApp.Domain.Entities.Staff", b =>
